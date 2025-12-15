@@ -11,4 +11,6 @@ public class UpdateProfileRequest {
     private String bio;
     @Size(max = 255, message = "avatarUrl too long")
     private String avatarUrl;
+    @Size(max = 50, message = "school too long")
+    private String school;
 }

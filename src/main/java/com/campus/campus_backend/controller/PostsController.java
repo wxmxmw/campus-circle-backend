@@ -14,6 +14,7 @@ import com.campus.campus_backend.repository.PostLikeRepository;
 import com.campus.campus_backend.repository.PostCollectionRepository;
 import com.campus.campus_backend.repository.UserRepository;
 import com.campus.campus_backend.repository.CommentRepository;
+import com.campus.campus_backend.repository.CommentLikeRepository;
 import com.campus.campus_backend.domain.Comment;
 import com.campus.campus_backend.domain.PointTransaction;
 import com.campus.campus_backend.repository.PointTransactionRepository;
@@ -48,13 +49,14 @@ public class PostsController {
     private final PostLikeRepository postLikeRepository;
     private final PostCollectionRepository postCollectionRepository;
     private final CommentRepository commentRepository;
+    private final CommentLikeRepository commentLikeRepository;
     private final PointTransactionRepository pointTransactionRepository;
     private final ObjectMapper mapper = new ObjectMapper();
 
     public PostsController(PostRepository postRepository, UserRepository userRepository,
             CategoryRepository categoryRepository, PostLikeRepository postLikeRepository,
             PostCollectionRepository postCollectionRepository, CommentRepository commentRepository,
-            PointTransactionRepository pointTransactionRepository) {
+            PointTransactionRepository pointTransactionRepository, CommentLikeRepository commentLikeRepository) {
         this.postRepository = postRepository;
         this.userRepository = userRepository;
         this.categoryRepository = categoryRepository;
@@ -62,6 +64,7 @@ public class PostsController {
         this.postCollectionRepository = postCollectionRepository;
         this.commentRepository = commentRepository;
         this.pointTransactionRepository = pointTransactionRepository;
+        this.commentLikeRepository = commentLikeRepository;
     }
 
     @PostMapping
@@ -136,7 +139,8 @@ public class PostsController {
 
     @GetMapping
     @Transactional(readOnly = true)
-    public Result<Object> list(@RequestParam(required = false) String keyword,
+    public Result<Object> list(@AuthenticationPrincipal UserDetails principal,
+            @RequestParam(required = false) String keyword,
             @RequestParam(required = false) Long categoryId,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int pageSize) {
@@ -159,6 +163,10 @@ public class PostsController {
             postsPage = postRepository.findAll(pageable);
         }
         List<Map<String, Object>> list = new ArrayList<>();
+        User current = null;
+        if (principal != null) {
+            current = userRepository.findByUsername(principal.getUsername()).orElse(null);
+        }
         for (Post p : postsPage.getContent()) {
             Map<String, Object> item = new LinkedHashMap<>();
             item.put("id", p.getId());
@@ -207,6 +215,11 @@ public class PostsController {
             item.put("comments", String.valueOf(p.getCommentCount()));
             item.put("likes", String.valueOf(p.getLikeCount()));
             item.put("isTop", Boolean.TRUE.equals(p.getIsSticky()));
+            boolean isLiked = false;
+            if (current != null) {
+                isLiked = postLikeRepository.existsByPostIdAndUserId(p.getId(), current.getId());
+            }
+            item.put("isLiked", isLiked);
             list.add(item);
         }
         long total = postsPage.getTotalElements();
@@ -379,8 +392,13 @@ public class PostsController {
 
     @GetMapping("/{postId}/comments")
     @Transactional(readOnly = true)
-    public Result<java.util.Map<String, Object>> listComments(@PathVariable Long postId) {
+    public Result<java.util.Map<String, Object>> listComments(@AuthenticationPrincipal UserDetails principal,
+            @PathVariable Long postId) {
         Post post = postRepository.findById(postId).orElseThrow(() -> new BizException(ErrorCode.NOT_FOUND));
+        User current = null;
+        if (principal != null) {
+            current = userRepository.findByUsername(principal.getUsername()).orElse(null);
+        }
         List<Comment> topLevel = commentRepository.findByPost_IdAndParentIdIsNullOrderByCreatedAtAsc(postId);
         List<Map<String, Object>> list = new ArrayList<>();
         for (Comment c : topLevel) {
@@ -399,6 +417,11 @@ public class PostsController {
                     : "";
             item.put("time", time);
             item.put("likes", c.getLikeCount() != null ? c.getLikeCount() : 0);
+            boolean isLiked = false;
+            if (current != null) {
+                isLiked = commentLikeRepository.existsByCommentIdAndUserId(c.getId(), current.getId());
+            }
+            item.put("isLiked", isLiked);
             List<Map<String, Object>> replies = new ArrayList<>();
             List<Comment> children = commentRepository.findByParentIdOrderByCreatedAtAsc(c.getId());
             for (Comment r : children) {
@@ -424,6 +447,12 @@ public class PostsController {
                                 : r.getReplyToUser().getUsername())
                         : null;
                 ri.put("replyTo", replyTo);
+                ri.put("likes", r.getLikeCount() != null ? r.getLikeCount() : 0);
+                boolean rIsLiked = false;
+                if (current != null) {
+                    rIsLiked = commentLikeRepository.existsByCommentIdAndUserId(r.getId(), current.getId());
+                }
+                ri.put("isLiked", rIsLiked);
                 replies.add(ri);
             }
             item.put("replies", replies);
@@ -515,6 +544,7 @@ public class PostsController {
         }
         data.put("isLiked", isLiked);
         data.put("isCollected", isCollected);
+        data.put("collectCount", p.getCollectCount());
         data.put("commentCount", p.getCommentCount());
         return Result.ok(data);
     }

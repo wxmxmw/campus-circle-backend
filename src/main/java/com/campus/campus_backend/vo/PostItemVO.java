@@ -11,4 +11,6 @@ public class PostItemVO {
     private List<String> images;
     private String createTime;
     private PostStatsVO stats;
+    private AuthorVO author;
+    private String collectedAt;
 }

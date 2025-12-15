@@ -93,6 +93,9 @@ public class UsersController {
         if (req.getAvatarUrl() != null) {
             u.setAvatarUrl(req.getAvatarUrl());
         }
+        if (req.getSchool() != null) {
+            u.setSchool(req.getSchool());
+        }
         userRepository.save(u);
         UserProfileVO vo = new UserProfileVO();
         vo.setId(u.getId());
@@ -308,6 +311,11 @@ public class UsersController {
             PostItemVO item = new PostItemVO();
             item.setId(p.getId());
             item.setContent(p.getContent());
+            com.campus.campus_backend.domain.User author = p.getUser();
+            if (author != null) {
+                item.setAuthor(new com.campus.campus_backend.vo.AuthorVO(author.getId(), author.getNickname(),
+                        author.getAvatarUrl()));
+            }
             List<String> imgs = new ArrayList<>();
             try {
                 if (p.getImages() != null && !p.getImages().isEmpty()) {
@@ -322,6 +330,10 @@ public class UsersController {
                     ? p.getCreatedAt().atOffset(ZoneOffset.UTC).toInstant().toString()
                     : "";
             item.setCreateTime(createTime);
+            String collectedAt = pc.getCreatedAt() != null
+                    ? pc.getCreatedAt().atOffset(ZoneOffset.UTC).toInstant().toString()
+                    : "";
+            item.setCollectedAt(collectedAt);
             PostStatsVO stats = new PostStatsVO();
             stats.setViews(p.getViewCount());
             stats.setLikes(p.getLikeCount());
