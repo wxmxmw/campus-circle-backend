@@ -1,0 +1,340 @@
+package com.campus.campus_backend.controller;
+
+import com.campus.campus_backend.common.BizException;
+import com.campus.campus_backend.common.ErrorCode;
+import com.campus.campus_backend.common.Result;
+import com.campus.campus_backend.domain.User;
+import com.campus.campus_backend.repository.UserRepository;
+import com.campus.campus_backend.dto.UpdateProfileRequest;
+import com.campus.campus_backend.dto.PointsChangeRequest;
+import com.campus.campus_backend.vo.UserProfileVO;
+import com.campus.campus_backend.vo.PostItemVO;
+import com.campus.campus_backend.vo.PostStatsVO;
+import com.campus.campus_backend.vo.PointTransactionVO;
+import com.campus.campus_backend.repository.PostRepository;
+import com.campus.campus_backend.repository.PointTransactionRepository;
+import com.campus.campus_backend.repository.PostCollectionRepository;
+import com.campus.campus_backend.domain.Post;
+import com.campus.campus_backend.domain.PointTransaction;
+import com.campus.campus_backend.domain.PostCollection;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import java.time.ZoneOffset;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.util.List;
+import java.util.ArrayList;
+
+@RestController
+@RequestMapping("/api/users")
+public class UsersController {
+    private final UserRepository userRepository;
+    private final PostRepository postRepository;
+    private final PointTransactionRepository pointTransactionRepository;
+    private final PostCollectionRepository postCollectionRepository;
+    private final ObjectMapper mapper = new ObjectMapper();
+    private final DateTimeFormatter dtf = DateTimeFormatter.ISO_OFFSET_DATE_TIME;
+    private final ZoneId zone = ZoneId.of("Asia/Shanghai");
+
+    public UsersController(UserRepository userRepository, PostRepository postRepository,
+            PointTransactionRepository pointTransactionRepository, PostCollectionRepository postCollectionRepository) {
+        this.userRepository = userRepository;
+        this.postRepository = postRepository;
+        this.pointTransactionRepository = pointTransactionRepository;
+        this.postCollectionRepository = postCollectionRepository;
+    }
+
+    @GetMapping("/me")
+    public Result<UserProfileVO> me(@AuthenticationPrincipal UserDetails principal) {
+        if (principal == null) {
+            throw new BizException(ErrorCode.UNAUTHORIZED);
+        }
+        User u = userRepository.findByUsername(principal.getUsername())
+                .orElseThrow(() -> new BizException(ErrorCode.UNAUTHORIZED));
+        UserProfileVO vo = new UserProfileVO();
+        vo.setId(u.getId());
+        vo.setUsername(u.getUsername());
+        vo.setNickname(u.getNickname());
+        vo.setAvatarUrl(u.getAvatarUrl());
+        vo.setSchool(u.getSchool());
+        vo.setPoints(u.getPoints());
+        vo.setBio(u.getBio());
+        return Result.ok(vo);
+    }
+
+    @PutMapping("/me")
+    public Result<UserProfileVO> updateMe(@AuthenticationPrincipal UserDetails principal,
+            @Validated @RequestBody UpdateProfileRequest req) {
+        if (principal == null) {
+            throw new BizException(ErrorCode.UNAUTHORIZED);
+        }
+        User u = userRepository.findByUsername(principal.getUsername())
+                .orElseThrow(() -> new BizException(ErrorCode.UNAUTHORIZED));
+        if (req.getNickname() != null) {
+            u.setNickname(req.getNickname());
+        }
+        if (req.getBio() != null) {
+            u.setBio(req.getBio());
+        }
+        if (req.getAvatarUrl() != null) {
+            u.setAvatarUrl(req.getAvatarUrl());
+        }
+        userRepository.save(u);
+        UserProfileVO vo = new UserProfileVO();
+        vo.setId(u.getId());
+        vo.setUsername(u.getUsername());
+        vo.setNickname(u.getNickname());
+        vo.setAvatarUrl(u.getAvatarUrl());
+        vo.setSchool(u.getSchool());
+        vo.setPoints(u.getPoints());
+        vo.setBio(u.getBio());
+        return Result.ok(vo);
+    }
+
+    @PostMapping("/me/points")
+    @Transactional
+    public Result<java.util.Map<String, Integer>> changePoints(@AuthenticationPrincipal UserDetails principal,
+            @Validated @RequestBody PointsChangeRequest req) {
+        if (principal == null) {
+            throw new BizException(ErrorCode.UNAUTHORIZED);
+        }
+        if (req.getAmount() == null || req.getAmount() == 0) {
+            throw new BizException(ErrorCode.BAD_REQUEST.getCode(), "amount invalid");
+        }
+        short tp = mapType(req.getType());
+        User u = userRepository.findByUsername(principal.getUsername())
+                .orElseThrow(() -> new BizException(ErrorCode.UNAUTHORIZED));
+        int newPoints = u.getPoints() + req.getAmount();
+        u.setPoints(newPoints);
+        userRepository.save(u);
+        PointTransaction pt = new PointTransaction();
+        pt.setUser(u);
+        pt.setAmount(req.getAmount());
+        pt.setType(tp);
+        pt.setDescription(req.getDescription());
+        pointTransactionRepository.save(pt);
+        java.util.Map<String, Integer> data = new java.util.HashMap<>();
+        data.put("currentPoints", u.getPoints());
+        return Result.ok(data);
+    }
+
+    private short mapType(String type) {
+        if (type == null)
+            throw new BizException(ErrorCode.BAD_REQUEST.getCode(), "type required");
+        String t = type.trim().toLowerCase();
+        return switch (t) {
+            case "signin" -> 1;
+            case "postreward" -> 2;
+            case "commentreward" -> 3;
+            case "topconsume" -> 4;
+            case "errandpay" -> 5;
+            case "errandincome" -> 6;
+            default -> throw new BizException(ErrorCode.BAD_REQUEST.getCode(), "type invalid");
+        };
+    }
+
+    @GetMapping("/me/posts")
+    public Result<Object> myPosts(@AuthenticationPrincipal UserDetails principal,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        if (principal == null) {
+            throw new BizException(ErrorCode.UNAUTHORIZED);
+        }
+        if (page < 1)
+            page = 1;
+        if (size < 1)
+            size = 10;
+        Pageable pageable = PageRequest.of(page - 1, size);
+        Page<Post> postsPage = postRepository.findByUserUsernameOrderByCreatedAtDesc(principal.getUsername(), pageable);
+        List<PostItemVO> list = new ArrayList<>();
+        for (Post p : postsPage.getContent()) {
+            PostItemVO item = new PostItemVO();
+            item.setId(p.getId());
+            item.setContent(p.getContent());
+            List<String> imgs = new ArrayList<>();
+            try {
+                if (p.getImages() != null && !p.getImages().isEmpty()) {
+                    imgs = mapper.readValue(p.getImages(), new TypeReference<List<String>>() {
+                    });
+                }
+            } catch (Exception ignore) {
+            }
+            item.setImages(imgs);
+            String createTime = p.getCreatedAt().atOffset(ZoneOffset.UTC).toInstant().toString();
+            item.setCreateTime(createTime);
+            PostStatsVO stats = new PostStatsVO();
+            stats.setViews(p.getViewCount());
+            stats.setLikes(p.getLikeCount());
+            stats.setComments(p.getCommentCount());
+            item.setStats(stats);
+            list.add(item);
+        }
+        long total = postsPage.getTotalElements();
+        boolean hasMore = postsPage.hasNext();
+        java.util.Map<String, Object> data = new java.util.HashMap<>();
+        data.put("list", list);
+        data.put("total", total);
+        data.put("hasMore", hasMore);
+        return Result.ok(data);
+    }
+
+    @GetMapping("/me/points/transactions")
+    public Result<Object> myPointTransactions(@AuthenticationPrincipal UserDetails principal,
+            @RequestParam(defaultValue = "1") int page, @RequestParam(defaultValue = "20") int size) {
+        if (principal == null) {
+            throw new BizException(ErrorCode.UNAUTHORIZED);
+        }
+        if (page < 1)
+            page = 1;
+        if (size < 1)
+            size = 20;
+        Pageable pageable = PageRequest.of(page - 1, size);
+        Page<PointTransaction> ptPage = pointTransactionRepository
+                .findByUserUsernameOrderByCreatedAtDesc(principal.getUsername(), pageable);
+        List<PointTransactionVO> list = new ArrayList<>();
+        for (PointTransaction pt : ptPage.getContent()) {
+            PointTransactionVO vo = new PointTransactionVO();
+            vo.setType(typeName(pt.getType()));
+            vo.setAmount(pt.getAmount());
+            vo.setDescription(pt.getDescription());
+            String createdTime = pt.getCreatedAt().atZone(zone).format(dtf);
+            vo.setCreatedTime(createdTime);
+            list.add(vo);
+        }
+        java.util.Map<String, Object> data = new java.util.HashMap<>();
+        data.put("list", list);
+        return Result.ok(data);
+    }
+
+    private String typeName(short t) {
+        return switch (t) {
+            case 1 -> "SignIn";
+            case 2 -> "PostReward";
+            case 3 -> "CommentReward";
+            case 4 -> "TopConsume";
+            case 5 -> "ErrandPay";
+            case 6 -> "ErrandIncome";
+            default -> "Unknown";
+        };
+    }
+
+    @PostMapping("/me/checkin")
+    @Transactional
+    public Result<java.util.Map<String, Integer>> checkin(@AuthenticationPrincipal UserDetails principal) {
+        if (principal == null) {
+            throw new BizException(ErrorCode.UNAUTHORIZED);
+        }
+        User u = userRepository.findByUsername(principal.getUsername())
+                .orElseThrow(() -> new BizException(ErrorCode.UNAUTHORIZED));
+        int gained = 10;
+        int newPoints = u.getPoints() + gained;
+        u.setPoints(newPoints);
+        userRepository.save(u);
+        PointTransaction pt = new PointTransaction();
+        pt.setUser(u);
+        pt.setAmount(gained);
+        pt.setType((short) 1);
+        pt.setDescription("每日签到");
+        pointTransactionRepository.save(pt);
+        java.util.Map<String, Integer> data = new java.util.LinkedHashMap<>();
+        data.put("points", gained);
+        data.put("totalPoints", u.getPoints());
+        return Result.ok(data);
+    }
+
+    @GetMapping("/me/checkin/status")
+    public Result<java.util.Map<String, Object>> checkinStatus(@AuthenticationPrincipal UserDetails principal) {
+        if (principal == null) {
+            throw new BizException(ErrorCode.UNAUTHORIZED);
+        }
+        java.util.List<PointTransaction> signIns = pointTransactionRepository
+                .findByUserUsernameAndTypeOrderByCreatedAtDesc(principal.getUsername(), (short) 1);
+        java.util.LinkedHashSet<java.time.LocalDate> dates = new java.util.LinkedHashSet<>();
+        for (PointTransaction s : signIns) {
+            java.time.LocalDate d = s.getCreatedAt().atZone(zone).toLocalDate();
+            if (!dates.contains(d)) {
+                dates.add(d);
+            }
+        }
+        java.time.LocalDate today = java.time.LocalDate.now(zone);
+        boolean checkedIn = dates.contains(today);
+        int streak = 0;
+        java.time.LocalDate expected = checkedIn ? today : today.minusDays(1);
+        for (java.time.LocalDate d : dates) {
+            if (d.equals(expected)) {
+                streak++;
+                expected = expected.minusDays(1);
+            } else if (d.isBefore(expected)) {
+                break;
+            }
+        }
+        java.util.Map<String, Object> data = new java.util.LinkedHashMap<>();
+        data.put("checkedIn", checkedIn);
+        data.put("checkInDays", streak);
+        return Result.ok(data);
+    }
+
+    @GetMapping("/me/collects")
+    @Transactional(readOnly = true)
+    public Result<Object> myCollects(@AuthenticationPrincipal UserDetails principal,
+            @RequestParam(defaultValue = "1") int page, @RequestParam(defaultValue = "10") int size) {
+        if (principal == null) {
+            throw new BizException(ErrorCode.UNAUTHORIZED);
+        }
+        if (page < 1)
+            page = 1;
+        if (size < 1)
+            size = 10;
+        Pageable pageable = PageRequest.of(page - 1, size);
+        Page<PostCollection> pcPage = postCollectionRepository
+                .findByUserUsernameOrderByCreatedAtDesc(principal.getUsername(), pageable);
+        List<PostItemVO> list = new ArrayList<>();
+        for (PostCollection pc : pcPage.getContent()) {
+            Post p = pc.getPost();
+            PostItemVO item = new PostItemVO();
+            item.setId(p.getId());
+            item.setContent(p.getContent());
+            List<String> imgs = new ArrayList<>();
+            try {
+                if (p.getImages() != null && !p.getImages().isEmpty()) {
+                    imgs = mapper.readValue(p.getImages(),
+                            new com.fasterxml.jackson.core.type.TypeReference<List<String>>() {
+                            });
+                }
+            } catch (Exception ignore) {
+            }
+            item.setImages(imgs);
+            String createTime = p.getCreatedAt() != null
+                    ? p.getCreatedAt().atOffset(ZoneOffset.UTC).toInstant().toString()
+                    : "";
+            item.setCreateTime(createTime);
+            PostStatsVO stats = new PostStatsVO();
+            stats.setViews(p.getViewCount());
+            stats.setLikes(p.getLikeCount());
+            stats.setComments(p.getCommentCount());
+            item.setStats(stats);
+            list.add(item);
+        }
+        long total = pcPage.getTotalElements();
+        boolean hasMore = pcPage.hasNext();
+        java.util.Map<String, Object> data = new java.util.HashMap<>();
+        data.put("list", list);
+        data.put("total", total);
+        data.put("hasMore", hasMore);
+        return Result.ok(data);
+    }
+}
