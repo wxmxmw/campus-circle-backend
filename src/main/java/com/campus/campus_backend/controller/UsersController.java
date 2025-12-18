@@ -4,14 +4,18 @@ import com.campus.campus_backend.common.BizException;
 import com.campus.campus_backend.common.ErrorCode;
 import com.campus.campus_backend.common.Result;
 import com.campus.campus_backend.domain.User;
+import com.campus.campus_backend.domain.UserFollow;
 import com.campus.campus_backend.repository.UserRepository;
 import com.campus.campus_backend.dto.UpdateProfileRequest;
 import com.campus.campus_backend.dto.PointsChangeRequest;
 import com.campus.campus_backend.vo.UserProfileVO;
 import com.campus.campus_backend.vo.PostItemVO;
 import com.campus.campus_backend.vo.PostStatsVO;
+import com.campus.campus_backend.vo.UserListItemVO;
+import com.campus.campus_backend.vo.UserProfileWithStatsVO;
 import com.campus.campus_backend.vo.PointTransactionVO;
 import com.campus.campus_backend.repository.PostRepository;
+import com.campus.campus_backend.repository.UserFollowRepository;
 import com.campus.campus_backend.repository.PointTransactionRepository;
 import com.campus.campus_backend.repository.PostCollectionRepository;
 import com.campus.campus_backend.domain.Post;
@@ -23,7 +27,9 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -37,7 +43,9 @@ import java.time.ZoneOffset;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Map;
 import java.util.ArrayList;
+import java.util.HashMap;
 
 @RestController
 @RequestMapping("/api/users")
@@ -49,13 +57,16 @@ public class UsersController {
     private final ObjectMapper mapper = new ObjectMapper();
     private final DateTimeFormatter dtf = DateTimeFormatter.ISO_OFFSET_DATE_TIME;
     private final ZoneId zone = ZoneId.of("Asia/Shanghai");
+    private final UserFollowRepository userFollowRepository;
 
     public UsersController(UserRepository userRepository, PostRepository postRepository,
-            PointTransactionRepository pointTransactionRepository, PostCollectionRepository postCollectionRepository) {
+            PointTransactionRepository pointTransactionRepository, PostCollectionRepository postCollectionRepository,
+            UserFollowRepository userFollowRepository) {
         this.userRepository = userRepository;
         this.postRepository = postRepository;
         this.pointTransactionRepository = pointTransactionRepository;
         this.postCollectionRepository = postCollectionRepository;
+        this.userFollowRepository = userFollowRepository;
     }
 
     @GetMapping("/me")
@@ -235,6 +246,16 @@ public class UsersController {
         };
     }
 
+    private String notificationTypeToString(short type) {
+        return switch (type) {
+            case 1 -> "like";
+            case 2 -> "comment";
+            case 3 -> "reply";
+            case 4 -> "follow";
+            default -> "unknown";
+        };
+    }
+
     @PostMapping("/me/checkin")
     @Transactional
     public Result<java.util.Map<String, Integer>> checkin(@AuthenticationPrincipal UserDetails principal) {
@@ -348,5 +369,194 @@ public class UsersController {
         data.put("total", total);
         data.put("hasMore", hasMore);
         return Result.ok(data);
+    }
+
+    @GetMapping("/{id}/following")
+    // 获取关注列表
+    public Result<Object> getFollowing(@AuthenticationPrincipal UserDetails principal,
+            @PathVariable Long id,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        if (principal == null) {
+            throw new BizException(ErrorCode.UNAUTHORIZED);
+        }
+        if (page < 1)
+            page = 1;
+        if (size < 1)
+            size = 20;// 第1页，每页20条
+
+        Pageable pageable = PageRequest.of(page - 1, size);
+        Page<UserFollow> followingPage = userFollowRepository.findByFollowerIdOrderByCreatedAtDesc(id, pageable);
+
+        User currentUser = userRepository.findByUsername(principal.getUsername()).orElse(null);
+        List<UserListItemVO> list = new ArrayList<>();
+
+        for (UserFollow follow : followingPage.getContent()) {
+            User followedUser = follow.getFollowing();
+            boolean isFollowing = false;
+            if (currentUser != null) {
+                isFollowing = userFollowRepository.existsByFollowerIdAndFollowingId(
+                        currentUser.getId(), followedUser.getId());
+            }
+
+            UserListItemVO vo = new UserListItemVO(
+                    followedUser.getId(),
+                    followedUser.getNickname(),
+                    followedUser.getAvatarUrl(),
+                    followedUser.getBio(),
+                    isFollowing);
+            list.add(vo);
+        }
+
+        Map<String, Object> data = new HashMap<>();
+        data.put("list", list);
+        data.put("total", followingPage.getTotalElements());
+        return Result.ok(data);
+    }
+
+    @GetMapping("/{id}/followers")
+    // 获取粉丝列表
+    public Result<Object> getFollowers(@AuthenticationPrincipal UserDetails principal,
+            @PathVariable Long id,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        if (principal == null) {
+            throw new BizException(ErrorCode.UNAUTHORIZED);
+        }
+        if (page < 1)
+            page = 1;
+        if (size < 1)
+            size = 20;
+
+        Pageable pageable = PageRequest.of(page - 1, size);
+        Page<UserFollow> followersPage = userFollowRepository.findByFollowingIdOrderByCreatedAtDesc(id, pageable);
+
+        User currentUser = userRepository.findByUsername(principal.getUsername()).orElse(null);
+        List<UserListItemVO> list = new ArrayList<>();
+
+        for (UserFollow follow : followersPage.getContent()) {
+            User followerUser = follow.getFollower();
+            boolean isFollowing = false;
+            if (currentUser != null) {
+                isFollowing = userFollowRepository.existsByFollowerIdAndFollowingId(
+                        currentUser.getId(), followerUser.getId());
+            }
+
+            UserListItemVO vo = new UserListItemVO(
+                    followerUser.getId(),
+                    followerUser.getNickname(),
+                    followerUser.getAvatarUrl(),
+                    followerUser.getBio(),
+                    isFollowing);
+            list.add(vo);
+        }
+
+        Map<String, Object> data = new HashMap<>();
+        data.put("list", list);
+        data.put("total", followersPage.getTotalElements());
+        return Result.ok(data);
+    }
+
+    @GetMapping("/{id}")
+    // 获取个人主页信息
+    public Result<UserProfileWithStatsVO> getUserProfile(@AuthenticationPrincipal UserDetails principal,
+            @PathVariable Long id) {
+        if (principal == null) {
+            throw new BizException(ErrorCode.UNAUTHORIZED);
+        }
+
+        User targetUser = userRepository.findById(id)
+                .orElseThrow(() -> new BizException(ErrorCode.NOT_FOUND));
+
+        User currentUser = userRepository.findByUsername(principal.getUsername()).orElse(null);
+
+        // 查询是否已关注
+        boolean isFollowing = false;
+        if (currentUser != null) {
+            isFollowing = userFollowRepository.existsByFollowerIdAndFollowingId(
+                    currentUser.getId(), targetUser.getId());
+        }
+
+        // 计算统计数据
+        Long likes = calculateUserLikes(targetUser.getId());
+        Long following = userFollowRepository.findByFollowerIdOrderByCreatedAtDesc(targetUser.getId(),
+                PageRequest.of(0, 1)).getTotalElements();
+        Long followers = userFollowRepository.findByFollowingIdOrderByCreatedAtDesc(targetUser.getId(),
+                PageRequest.of(0, 1)).getTotalElements();
+
+        UserProfileWithStatsVO.UserStatsVO stats = new UserProfileWithStatsVO.UserStatsVO(
+                likes, following, followers);
+
+        UserProfileWithStatsVO vo = new UserProfileWithStatsVO(
+                targetUser.getId(),
+                targetUser.getNickname(),
+                targetUser.getAvatarUrl(),
+                targetUser.getSchool(),
+                targetUser.getBio(),
+                stats,
+                isFollowing);
+
+        return Result.ok(vo);
+    }
+
+    private Long calculateUserLikes(Long userId) {
+        // 查询用户所有帖子的点赞总数
+        List<Post> userPosts = postRepository.findByUserId(userId);
+        return userPosts.stream()
+                .mapToLong(post -> post.getLikeCount() != null ? post.getLikeCount() : 0L)
+                .sum();
+    }
+
+    @PostMapping("/{id}/follow")
+    @Transactional
+    // 关注用户
+    public Result<Void> followUser(@AuthenticationPrincipal UserDetails principal,
+            @PathVariable Long id) {
+        if (principal == null) {
+            throw new BizException(ErrorCode.UNAUTHORIZED);
+        }
+
+        User currentUser = userRepository.findByUsername(principal.getUsername())
+                .orElseThrow(() -> new BizException(ErrorCode.UNAUTHORIZED));
+        User targetUser = userRepository.findById(id)
+                .orElseThrow(() -> new BizException(ErrorCode.NOT_FOUND));
+
+        // 不能关注自己
+        if (currentUser.getId().equals(targetUser.getId())) {
+            throw new BizException(ErrorCode.BAD_REQUEST.getCode(), "不能关注自己");
+        }
+
+        // 检查是否已关注
+        if (userFollowRepository.existsByFollowerIdAndFollowingId(currentUser.getId(), targetUser.getId())) {
+            throw new BizException(ErrorCode.BAD_REQUEST.getCode(), "已经关注该用户");
+        }
+
+        // 创建关注关系
+        UserFollow follow = new UserFollow();
+        follow.setFollower(currentUser);
+        follow.setFollowing(targetUser);
+        userFollowRepository.save(follow);
+
+        return Result.okMessage("关注成功");
+    }
+
+    @DeleteMapping("/{id}/follow")
+    @Transactional
+    // 取消关注
+    public Result<Void> unfollowUser(@AuthenticationPrincipal UserDetails principal,
+            @PathVariable Long id) {
+        if (principal == null) {
+            throw new BizException(ErrorCode.UNAUTHORIZED);
+        }
+
+        User currentUser = userRepository.findByUsername(principal.getUsername())
+                .orElseThrow(() -> new BizException(ErrorCode.UNAUTHORIZED));
+        User targetUser = userRepository.findById(id)
+                .orElseThrow(() -> new BizException(ErrorCode.NOT_FOUND));
+
+        // 删除关注关系
+        userFollowRepository.deleteByFollowerIdAndFollowingId(currentUser.getId(), targetUser.getId());
+
+        return Result.okMessage("取消关注成功");
     }
 }
