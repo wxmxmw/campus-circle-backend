@@ -29,7 +29,6 @@ import com.campus.campus_backend.vo.ErrandListItemVO;
 
 @RestController
 @RequestMapping("/api/errands")
-// 发布跑腿
 public class ErrandsController {
     private final ErrandRepository errandRepository;
     private final UserRepository userRepository;
@@ -37,8 +36,8 @@ public class ErrandsController {
     private final DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     public ErrandsController(ErrandRepository errandRepository,
-            UserRepository userRepository,
-            PointTransactionRepository pointTransactionRepository) {
+                             UserRepository userRepository,
+                             PointTransactionRepository pointTransactionRepository) {
         this.errandRepository = errandRepository;
         this.userRepository = userRepository;
         this.pointTransactionRepository = pointTransactionRepository;
@@ -46,8 +45,8 @@ public class ErrandsController {
 
     @PostMapping
     @Transactional
-    public Result<Errand> createErrand(@AuthenticationPrincipal UserDetails principal,
-            @Validated @RequestBody CreateErrandRequest req) {
+    public Result<Object> createErrand(@AuthenticationPrincipal UserDetails principal,
+                                       @Validated @RequestBody CreateErrandRequest req) {
         if (principal == null) {
             throw new BizException(ErrorCode.UNAUTHORIZED);
         }
@@ -88,12 +87,24 @@ public class ErrandsController {
         errand.setStatus((short) 0); // 待接单
 
         errand = errandRepository.save(errand);
-        return Result.ok(errand);
+
+        // 返回正确的响应格式
+        Map<String, Object> data = new HashMap<>();
+        data.put("id", errand.getId());
+        data.put("content", errand.getContent());
+        data.put("pickupAddr", errand.getPickupAddr());
+        data.put("deliveryAddr", errand.getDeliveryAddr());
+        data.put("bounty", errand.getBounty());
+        data.put("currency", errand.getCurrency());
+        data.put("deadline", errand.getDeadline());
+        data.put("status", errand.getStatus());
+        data.put("createTime", errand.getCreatedAt());
+
+        return Result.ok("发布成功", data);
     }
 
     @GetMapping
     @Transactional(readOnly = true)
-    // 跑腿列表
     public Result<Object> listErrands(
             @RequestParam(required = false, defaultValue = "0") Integer status,
             @RequestParam(required = false, defaultValue = "bounty_desc") String sort,
@@ -152,9 +163,8 @@ public class ErrandsController {
 
     @PostMapping("/{id}/accept")
     @Transactional
-    //接单
     public Result<Errand> acceptErrand(@AuthenticationPrincipal UserDetails principal,
-            @PathVariable Long id) {
+                                       @PathVariable Long id) {
         if (principal == null) {
             throw new BizException(ErrorCode.UNAUTHORIZED);
         }
@@ -206,7 +216,6 @@ public class ErrandsController {
 
     @PostMapping("/{id}/complete")
     @Transactional
-    //确认完成
     public Result<Errand> completeErrand(@AuthenticationPrincipal UserDetails principal,
                                          @PathVariable Long id) {
         if (principal == null) {
@@ -251,7 +260,6 @@ public class ErrandsController {
 
     @PostMapping("/{id}/cancel")
     @Transactional
-    //取消订单
     public Result<Errand> cancelErrand(@AuthenticationPrincipal UserDetails principal,
                                        @PathVariable Long id) {
         if (principal == null) {
@@ -305,8 +313,7 @@ public class ErrandsController {
 
     @GetMapping("/{id}")
     @Transactional(readOnly = true)
-    //获取详情
-    public Result<Errand> getErrandDetail(@AuthenticationPrincipal UserDetails principal,
+    public Result<Object> getErrandDetail(@AuthenticationPrincipal UserDetails principal,
                                           @PathVariable Long id) {
         if (principal == null) {
             throw new BizException(ErrorCode.UNAUTHORIZED);
@@ -322,6 +329,30 @@ public class ErrandsController {
             throw new BizException(ErrorCode.BAD_REQUEST.getCode(), "跑腿信息不完整");
         }
 
-        return Result.ok(errand);
+        // 构建符合API规范的响应数据
+        Map<String, Object> data = new HashMap<>();
+        data.put("id", errand.getId());
+
+        // 构建发布者信息
+        Map<String, Object> publisherInfo = new HashMap<>();
+        if (publisher != null) {
+            publisherInfo.put("id", publisher.getId());
+            publisherInfo.put("nickname", publisher.getNickname() != null ? publisher.getNickname() : publisher.getUsername());
+            publisherInfo.put("avatar", publisher.getAvatarUrl());
+        }
+        data.put("publisher", publisherInfo);
+
+        data.put("content", errand.getContent());
+        data.put("pickupAddr", errand.getPickupAddr());
+        data.put("deliveryAddr", errand.getDeliveryAddr());
+        data.put("bounty", errand.getBounty());
+        data.put("status", errand.getStatus());
+        data.put("hiddenInfo", errand.getHiddenInfo());
+        data.put("createTime", errand.getCreatedAt());
+
+        // 返回跑腿员ID而不是完整对象
+        data.put("runnerId", errand.getRunner() != null ? errand.getRunner().getId() : null);
+
+        return Result.ok(data);
     }
 }

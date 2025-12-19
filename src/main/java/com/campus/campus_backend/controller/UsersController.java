@@ -372,27 +372,29 @@ public class UsersController {
     }
 
     @GetMapping("/{id}/following")
-    // 获取关注列表
     public Result<Object> getFollowing(@AuthenticationPrincipal UserDetails principal,
-            @PathVariable Long id,
-            @RequestParam(defaultValue = "1") int page,
-            @RequestParam(defaultValue = "20") int size) {
+                                       @PathVariable Long id,
+                                       @RequestParam(defaultValue = "1") int page,
+                                       @RequestParam(defaultValue = "20") int size) {
         if (principal == null) {
             throw new BizException(ErrorCode.UNAUTHORIZED);
         }
-        if (page < 1)
-            page = 1;
-        if (size < 1)
-            size = 20;// 第1页，每页20条
+        if (page < 1) page = 1;
+        if (size < 1) size = 20;
 
         Pageable pageable = PageRequest.of(page - 1, size);
-        Page<UserFollow> followingPage = userFollowRepository.findByFollowerIdOrderByCreatedAtDesc(id, pageable);
+        // 使用JOIN FETCH查询避免懒加载问题
+        Page<UserFollow> followingPage = userFollowRepository.findByFollowerIdWithFollowingOrderByCreatedAtDesc(id, pageable);
 
         User currentUser = userRepository.findByUsername(principal.getUsername()).orElse(null);
         List<UserListItemVO> list = new ArrayList<>();
 
         for (UserFollow follow : followingPage.getContent()) {
             User followedUser = follow.getFollowing();
+            if (followedUser == null) {
+                continue; // 跳过无效数据
+            }
+
             boolean isFollowing = false;
             if (currentUser != null) {
                 isFollowing = userFollowRepository.existsByFollowerIdAndFollowingId(
@@ -401,7 +403,7 @@ public class UsersController {
 
             UserListItemVO vo = new UserListItemVO(
                     followedUser.getId(),
-                    followedUser.getNickname(),
+                    followedUser.getNickname() != null ? followedUser.getNickname() : followedUser.getUsername(),
                     followedUser.getAvatarUrl(),
                     followedUser.getBio(),
                     isFollowing);
@@ -415,27 +417,29 @@ public class UsersController {
     }
 
     @GetMapping("/{id}/followers")
-    // 获取粉丝列表
     public Result<Object> getFollowers(@AuthenticationPrincipal UserDetails principal,
-            @PathVariable Long id,
-            @RequestParam(defaultValue = "1") int page,
-            @RequestParam(defaultValue = "20") int size) {
+                                       @PathVariable Long id,
+                                       @RequestParam(defaultValue = "1") int page,
+                                       @RequestParam(defaultValue = "20") int size) {
         if (principal == null) {
             throw new BizException(ErrorCode.UNAUTHORIZED);
         }
-        if (page < 1)
-            page = 1;
-        if (size < 1)
-            size = 20;
+        if (page < 1) page = 1;
+        if (size < 1) size = 20;
 
         Pageable pageable = PageRequest.of(page - 1, size);
-        Page<UserFollow> followersPage = userFollowRepository.findByFollowingIdOrderByCreatedAtDesc(id, pageable);
+        // 使用JOIN FETCH查询避免懒加载问题
+        Page<UserFollow> followersPage = userFollowRepository.findByFollowingIdWithFollowerOrderByCreatedAtDesc(id, pageable);
 
         User currentUser = userRepository.findByUsername(principal.getUsername()).orElse(null);
         List<UserListItemVO> list = new ArrayList<>();
 
         for (UserFollow follow : followersPage.getContent()) {
             User followerUser = follow.getFollower();
+            if (followerUser == null) {
+                continue; // 跳过无效数据
+            }
+
             boolean isFollowing = false;
             if (currentUser != null) {
                 isFollowing = userFollowRepository.existsByFollowerIdAndFollowingId(
@@ -444,7 +448,7 @@ public class UsersController {
 
             UserListItemVO vo = new UserListItemVO(
                     followerUser.getId(),
-                    followerUser.getNickname(),
+                    followerUser.getNickname() != null ? followerUser.getNickname() : followerUser.getUsername(),
                     followerUser.getAvatarUrl(),
                     followerUser.getBio(),
                     isFollowing);
@@ -458,9 +462,9 @@ public class UsersController {
     }
 
     @GetMapping("/{id}")
-    // 获取个人主页信息
+// 获取个人主页信息
     public Result<UserProfileWithStatsVO> getUserProfile(@AuthenticationPrincipal UserDetails principal,
-            @PathVariable Long id) {
+                                                         @PathVariable Long id) {
         if (principal == null) {
             throw new BizException(ErrorCode.UNAUTHORIZED);
         }
@@ -509,9 +513,9 @@ public class UsersController {
 
     @PostMapping("/{id}/follow")
     @Transactional
-    // 关注用户
+// 关注用户
     public Result<Void> followUser(@AuthenticationPrincipal UserDetails principal,
-            @PathVariable Long id) {
+                                   @PathVariable Long id) {
         if (principal == null) {
             throw new BizException(ErrorCode.UNAUTHORIZED);
         }
@@ -542,9 +546,9 @@ public class UsersController {
 
     @DeleteMapping("/{id}/follow")
     @Transactional
-    // 取消关注
+// 取消关注
     public Result<Void> unfollowUser(@AuthenticationPrincipal UserDetails principal,
-            @PathVariable Long id) {
+                                     @PathVariable Long id) {
         if (principal == null) {
             throw new BizException(ErrorCode.UNAUTHORIZED);
         }
