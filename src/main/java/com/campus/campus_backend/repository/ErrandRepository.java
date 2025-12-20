@@ -11,6 +11,9 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 
 public interface ErrandRepository extends JpaRepository<Errand, Long> {
+    // 新增：查询用户接受的跑腿
+    Page<Errand> findByRunnerIdOrderByCreatedAtDesc(Long runnerId, Pageable pageable);
+
     Page<Errand> findByStatusOrderByCreatedAtDesc(Integer status, Pageable pageable);
 
     Page<Errand> findByPublisherIdOrderByCreatedAtDesc(Long publisherId, Pageable pageable);

@@ -13,12 +13,15 @@ import com.campus.campus_backend.vo.PostItemVO;
 import com.campus.campus_backend.vo.PostStatsVO;
 import com.campus.campus_backend.vo.UserListItemVO;
 import com.campus.campus_backend.vo.UserProfileWithStatsVO;
+import com.campus.campus_backend.vo.ErrandListItemVO;
 import com.campus.campus_backend.vo.PointTransactionVO;
 import com.campus.campus_backend.repository.PostRepository;
 import com.campus.campus_backend.repository.UserFollowRepository;
 import com.campus.campus_backend.repository.PointTransactionRepository;
 import com.campus.campus_backend.repository.PostCollectionRepository;
+import com.campus.campus_backend.repository.ErrandRepository;
 import com.campus.campus_backend.domain.Post;
+import com.campus.campus_backend.domain.Errand;
 import com.campus.campus_backend.domain.PointTransaction;
 import com.campus.campus_backend.domain.PostCollection;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -58,15 +61,17 @@ public class UsersController {
     private final DateTimeFormatter dtf = DateTimeFormatter.ISO_OFFSET_DATE_TIME;
     private final ZoneId zone = ZoneId.of("Asia/Shanghai");
     private final UserFollowRepository userFollowRepository;
+    private final ErrandRepository errandRepository;
 
     public UsersController(UserRepository userRepository, PostRepository postRepository,
             PointTransactionRepository pointTransactionRepository, PostCollectionRepository postCollectionRepository,
-            UserFollowRepository userFollowRepository) {
+            UserFollowRepository userFollowRepository, ErrandRepository errandRepository) {
         this.userRepository = userRepository;
         this.postRepository = postRepository;
         this.pointTransactionRepository = pointTransactionRepository;
         this.postCollectionRepository = postCollectionRepository;
         this.userFollowRepository = userFollowRepository;
+        this.errandRepository = errandRepository;
     }
 
     @GetMapping("/me")
@@ -373,18 +378,21 @@ public class UsersController {
 
     @GetMapping("/{id}/following")
     public Result<Object> getFollowing(@AuthenticationPrincipal UserDetails principal,
-                                       @PathVariable Long id,
-                                       @RequestParam(defaultValue = "1") int page,
-                                       @RequestParam(defaultValue = "20") int size) {
+            @PathVariable Long id,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") int size) {
         if (principal == null) {
             throw new BizException(ErrorCode.UNAUTHORIZED);
         }
-        if (page < 1) page = 1;
-        if (size < 1) size = 20;
+        if (page < 1)
+            page = 1;
+        if (size < 1)
+            size = 20;
 
         Pageable pageable = PageRequest.of(page - 1, size);
         // 使用JOIN FETCH查询避免懒加载问题
-        Page<UserFollow> followingPage = userFollowRepository.findByFollowerIdWithFollowingOrderByCreatedAtDesc(id, pageable);
+        Page<UserFollow> followingPage = userFollowRepository.findByFollowerIdWithFollowingOrderByCreatedAtDesc(id,
+                pageable);
 
         User currentUser = userRepository.findByUsername(principal.getUsername()).orElse(null);
         List<UserListItemVO> list = new ArrayList<>();
@@ -418,18 +426,21 @@ public class UsersController {
 
     @GetMapping("/{id}/followers")
     public Result<Object> getFollowers(@AuthenticationPrincipal UserDetails principal,
-                                       @PathVariable Long id,
-                                       @RequestParam(defaultValue = "1") int page,
-                                       @RequestParam(defaultValue = "20") int size) {
+            @PathVariable Long id,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") int size) {
         if (principal == null) {
             throw new BizException(ErrorCode.UNAUTHORIZED);
         }
-        if (page < 1) page = 1;
-        if (size < 1) size = 20;
+        if (page < 1)
+            page = 1;
+        if (size < 1)
+            size = 20;
 
         Pageable pageable = PageRequest.of(page - 1, size);
         // 使用JOIN FETCH查询避免懒加载问题
-        Page<UserFollow> followersPage = userFollowRepository.findByFollowingIdWithFollowerOrderByCreatedAtDesc(id, pageable);
+        Page<UserFollow> followersPage = userFollowRepository.findByFollowingIdWithFollowerOrderByCreatedAtDesc(id,
+                pageable);
 
         User currentUser = userRepository.findByUsername(principal.getUsername()).orElse(null);
         List<UserListItemVO> list = new ArrayList<>();
@@ -462,9 +473,9 @@ public class UsersController {
     }
 
     @GetMapping("/{id}")
-// 获取个人主页信息
+    // 获取个人主页信息
     public Result<UserProfileWithStatsVO> getUserProfile(@AuthenticationPrincipal UserDetails principal,
-                                                         @PathVariable Long id) {
+            @PathVariable Long id) {
         if (principal == null) {
             throw new BizException(ErrorCode.UNAUTHORIZED);
         }
@@ -513,9 +524,9 @@ public class UsersController {
 
     @PostMapping("/{id}/follow")
     @Transactional
-// 关注用户
+    // 关注用户
     public Result<Void> followUser(@AuthenticationPrincipal UserDetails principal,
-                                   @PathVariable Long id) {
+            @PathVariable Long id) {
         if (principal == null) {
             throw new BizException(ErrorCode.UNAUTHORIZED);
         }
@@ -546,9 +557,9 @@ public class UsersController {
 
     @DeleteMapping("/{id}/follow")
     @Transactional
-// 取消关注
+    // 取消关注
     public Result<Void> unfollowUser(@AuthenticationPrincipal UserDetails principal,
-                                     @PathVariable Long id) {
+            @PathVariable Long id) {
         if (principal == null) {
             throw new BizException(ErrorCode.UNAUTHORIZED);
         }
@@ -562,5 +573,72 @@ public class UsersController {
         userFollowRepository.deleteByFollowerIdAndFollowingId(currentUser.getId(), targetUser.getId());
 
         return Result.okMessage("取消关注成功");
+    }
+
+    @GetMapping("/me/errands")
+    @Transactional(readOnly = true)
+    public Result<Object> myErrands(@AuthenticationPrincipal UserDetails principal,
+            @RequestParam(defaultValue = "published") String type,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int size) {
+
+        if (principal == null) {
+            throw new BizException(ErrorCode.UNAUTHORIZED);
+        }
+
+        if (page < 1) {
+            page = 1;
+        }
+        if (size < 1) {
+            size = 10;
+        }
+
+        User user = userRepository.findByUsername(principal.getUsername())
+                .orElseThrow(() -> new BizException(ErrorCode.UNAUTHORIZED));
+
+        Pageable pageable = PageRequest.of(page - 1, size);
+        Page<Errand> errandsPage;
+
+        // 根据type参数选择查询方法
+        if ("accepted".equals(type)) {
+            // 查询我接受的跑腿
+            errandsPage = errandRepository.findByRunnerIdOrderByCreatedAtDesc(user.getId(), pageable);
+        } else {
+            // 默认查询我发布的跑腿
+            errandsPage = errandRepository.findByPublisherIdOrderByCreatedAtDesc(user.getId(), pageable);
+        }
+
+        List<ErrandListItemVO> list = new ArrayList<>();
+        for (Errand errand : errandsPage.getContent()) {
+            User publisher = errand.getPublisher();
+
+            if (publisher == null) {
+                continue;
+            }
+
+            ErrandListItemVO vo = new ErrandListItemVO(
+                    errand.getId(),
+                    errand.getContent(),
+                    errand.getPickupAddr(),
+                    errand.getDeliveryAddr(),
+                    errand.getBounty(),
+                    errand.getCurrency(),
+                    errand.getDeadline(),
+                    errand.getStatus(),
+                    errand.getCreatedAt(),
+                    publisher.getId(),
+                    publisher.getNickname() != null ? publisher.getNickname() : publisher.getUsername(),
+                    publisher.getAvatarUrl() != null ? publisher.getAvatarUrl() : "");
+            list.add(vo);
+        }
+
+        Map<String, Object> data = new HashMap<>();
+        data.put("list", list);
+        data.put("total", errandsPage.getTotalElements());
+        data.put("page", page);
+        data.put("pageSize", size);
+        data.put("hasMore", errandsPage.hasNext());
+
+        return Result.ok(data);
     }
 }
