@@ -3,12 +3,7 @@ package com.campus.campus_backend.controller;
 import com.campus.campus_backend.common.BizException;
 import com.campus.campus_backend.common.ErrorCode;
 import com.campus.campus_backend.common.Result;
-import com.campus.campus_backend.domain.Category;
-import com.campus.campus_backend.domain.Comment;
-import com.campus.campus_backend.domain.Notification;
-import com.campus.campus_backend.domain.PointTransaction;
-import com.campus.campus_backend.domain.Post;
-import com.campus.campus_backend.domain.User;
+import com.campus.campus_backend.domain.*;
 import com.campus.campus_backend.dto.CreateCommentRequest;
 import com.campus.campus_backend.dto.CreatePostRequest;
 import com.campus.campus_backend.repository.CategoryRepository;
@@ -35,7 +30,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-
+import com.campus.campus_backend.repository.SysFileRepository;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -56,6 +51,7 @@ public class PostsController {
     private final CommentLikeRepository commentLikeRepository;
     private final PointTransactionRepository pointTransactionRepository;
     private final NotificationRepository notificationRepository;
+    private final SysFileRepository sysFileRepository;
     private final ObjectMapper mapper = new ObjectMapper();
 
     public PostsController(PostRepository postRepository,
@@ -66,7 +62,8 @@ public class PostsController {
                            CommentRepository commentRepository,
                            PointTransactionRepository pointTransactionRepository,
                            CommentLikeRepository commentLikeRepository,
-                           NotificationRepository notificationRepository) {
+                           NotificationRepository notificationRepository,
+                           SysFileRepository sysFileRepository) {
         this.postRepository = postRepository;
         this.userRepository = userRepository;
         this.categoryRepository = categoryRepository;
@@ -76,6 +73,7 @@ public class PostsController {
         this.pointTransactionRepository = pointTransactionRepository;
         this.commentLikeRepository = commentLikeRepository;
         this.notificationRepository = notificationRepository;
+        this.sysFileRepository = sysFileRepository;
     }
 
     @PostMapping
@@ -122,6 +120,19 @@ public class PostsController {
         p.setLikeCount(0);
         p.setCommentCount(0);
         p = postRepository.save(p);
+
+        // 新增：更新相关文件的业务关联
+        if (req.getImages() != null && !req.getImages().isEmpty()) {
+            // 从URL中提取文件ID或通过URL查询文件记录
+            for (String imageUrl : req.getImages()) {
+                SysFile file = sysFileRepository.findByFileUrl(imageUrl);
+                if (file != null) {
+                    file.setBusinessId(p.getId());
+                    file.setBusinessType("post");
+                    sysFileRepository.save(file);
+                }
+            }
+        }
 
         // 发帖积分奖励
         int currentPoints = user.getPoints() != null ? user.getPoints() : 0;

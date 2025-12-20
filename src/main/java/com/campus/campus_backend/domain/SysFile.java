@@ -21,6 +21,13 @@ public class SysFile {
     private Long uploaderId;     // 上传者ID
     private LocalDateTime createTime;
 
+    // 新增业务关联字段
+    @Column(length = 32)
+    private String businessType;  // 业务类型，如 "post"
+
+    @Column
+    private Long businessId;      // 业务ID，如 postId
+
     // 构造函数
     public SysFile() {}
 
@@ -43,4 +50,10 @@ public class SysFile {
     public void setUploaderId(Long uploaderId) { this.uploaderId = uploaderId; }
     public LocalDateTime getCreateTime() { return createTime; }
     public void setCreateTime(LocalDateTime createTime) { this.createTime = createTime; }
+
+    // 新增字段的 getter/setter
+    public String getBusinessType() { return businessType; }
+    public void setBusinessType(String businessType) { this.businessType = businessType; }
+    public Long getBusinessId() { return businessId; }
+    public void setBusinessId(Long businessId) { this.businessId = businessId; }
 }
