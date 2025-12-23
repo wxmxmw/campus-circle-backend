@@ -1,5 +1,6 @@
 package com.campus.campus_backend.common;
 
+import java.util.Map;
 import lombok.Data;
 
 @Data
@@ -34,6 +35,15 @@ public class Result<T> {
         Result<T> r = new Result<>();
         r.code = code;
         r.message = message;
+        return r;
+    }
+
+    // 移除重复的方法，实现正确的 ok(String, T) 方法
+    public static <T> Result<T> ok(String message, T data) {
+        Result<T> r = new Result<>();
+        r.code = ErrorCode.OK.getCode();
+        r.message = message;
+        r.data = data;
         return r;
     }
 }

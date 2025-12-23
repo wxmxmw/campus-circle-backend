@@ -10,4 +10,3 @@ public class UserBriefVO {
     private String nickname;
     private Integer points;
 }
-

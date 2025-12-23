@@ -22,7 +22,7 @@ public class SecurityConfig {
     private final RestAccessDeniedHandler accessDeniedHandler;
 
     public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter,
-            RestAuthenticationEntryPoint authenticationEntryPoint, RestAccessDeniedHandler accessDeniedHandler) {
+                          RestAuthenticationEntryPoint authenticationEntryPoint, RestAccessDeniedHandler accessDeniedHandler) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
         this.authenticationEntryPoint = authenticationEntryPoint;
         this.accessDeniedHandler = accessDeniedHandler;
@@ -38,6 +38,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/register", "/api/auth/login", "/api/auth/refresh").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/categories").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/posts", "/api/posts/**").permitAll()
+                        .requestMatchers("/uploads/**").permitAll() // 允许访问上传的图片
                         .anyRequest().authenticated())
                 .exceptionHandling(eh -> eh.authenticationEntryPoint(authenticationEntryPoint)
                         .accessDeniedHandler(accessDeniedHandler))
