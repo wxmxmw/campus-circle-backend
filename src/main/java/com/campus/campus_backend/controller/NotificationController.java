@@ -19,6 +19,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
+import com.campus.campus_backend.service.UserOnlineService;
 
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -36,6 +37,7 @@ public class NotificationController {
     private final UserRepository userRepository;
     private final ChatMessageRepository chatMessageRepository;
     private final ConversationRepository conversationRepository;
+    private final UserOnlineService userOnlineService;
     private final DateTimeFormatter dtf = DateTimeFormatter.ISO_OFFSET_DATE_TIME;
     private final ZoneId zone = ZoneId.of("Asia/Shanghai");
 
@@ -43,11 +45,13 @@ public class NotificationController {
             NotificationRepository notificationRepository,
             UserRepository userRepository,
             ChatMessageRepository chatMessageRepository,
-            ConversationRepository conversationRepository) {
+            ConversationRepository conversationRepository,
+            UserOnlineService userOnlineService) {
         this.notificationRepository = notificationRepository;
         this.userRepository = userRepository;
         this.chatMessageRepository = chatMessageRepository;
         this.conversationRepository = conversationRepository;
+        this.userOnlineService = userOnlineService;
     }
 
     // 6.2 标记私信已读
@@ -179,21 +183,24 @@ public class NotificationController {
         User otherUser = userRepository.findById(userId)
                 .orElseThrow(() -> new BizException(ErrorCode.NOT_FOUND));
 
-        // 查找会话
-        Conversation conversation = conversationRepository.findByUser1AndUser2(currentUser, otherUser)
-                .orElseThrow(() -> new BizException(ErrorCode.NOT_FOUND));
+        // 直接查询双方消息，无需查找 conversation
+        List<ChatMessage> allMessages = chatMessageRepository.findByUsers(currentUser.getId(), otherUser.getId());
 
-        // 分页获取消息
-        Pageable pageable = PageRequest.of(page - 1, pageSize);
-        Page<ChatMessage> messagesPage = chatMessageRepository.findByConversationOrderByCreatedAtDesc(conversation, pageable);
+        // 手动分页处理
+        int total = allMessages.size();
+        int fromIndex = (page - 1) * pageSize;
+        int toIndex = Math.min(fromIndex + pageSize, total);
+
+        List<ChatMessage> pageMessages = fromIndex < total ?
+                allMessages.subList(fromIndex, toIndex) : new ArrayList<>();
 
         List<Map<String, Object>> list = new ArrayList<>();
-        for (ChatMessage message : messagesPage.getContent()) {
+        for (ChatMessage message : pageMessages) {
             Map<String, Object> item = new HashMap<>();
             item.put("id", message.getId());
             item.put("senderId", message.getSender().getId());
             item.put("receiverId", message.getReceiver().getId());
-            item.put("type", "text"); // 目前只支持文本消息
+            item.put("type", "text");
             item.put("content", message.getContent());
             item.put("time", message.getCreatedAt().atZone(zone).format(dtf));
             item.put("status", message.getStatus());
@@ -202,8 +209,8 @@ public class NotificationController {
 
         Map<String, Object> data = new HashMap<>();
         data.put("list", list);
-        data.put("total", messagesPage.getTotalElements());
-        data.put("hasMore", messagesPage.hasNext());
+        data.put("total", total);
+        data.put("hasMore", toIndex < total);
 
         return Result.ok(data);
     }
@@ -226,7 +233,7 @@ public class NotificationController {
         data.put("id", user.getId());
         data.put("username", user.getNickname() != null ? user.getNickname() : user.getUsername());
         data.put("avatar", user.getAvatarUrl());
-        data.put("isOnline", false); // 暂时硬编码，后续可以实现在线状态
+        data.put("isOnline", userOnlineService.isUserOnline(userId)); // 使用Redis查询在线状态
 
         return Result.ok(data);
     }

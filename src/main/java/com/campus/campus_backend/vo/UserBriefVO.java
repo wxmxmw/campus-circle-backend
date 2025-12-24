@@ -9,4 +9,5 @@ public class UserBriefVO {
     private Long id;
     private String nickname;
     private Integer points;
+    private String role;
 }

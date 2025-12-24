@@ -15,6 +15,7 @@ import com.campus.campus_backend.vo.UserBriefVO;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
+import com.campus.campus_backend.service.UserOnlineService;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
@@ -30,17 +31,19 @@ public class AuthController {
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
     private final UserRepository userRepository;
+    private final UserOnlineService userOnlineService;
     private final UserService userService;
     private final StringRedisTemplate redisTemplate;
 
     public AuthController(UserDetailsService userDetailsService, PasswordEncoder passwordEncoder, JwtUtil jwtUtil,
-            UserRepository userRepository, UserService userService, StringRedisTemplate redisTemplate) {
+                          UserRepository userRepository, UserService userService, StringRedisTemplate redisTemplate, UserOnlineService userOnlineService) {
         this.userDetailsService = userDetailsService;
         this.passwordEncoder = passwordEncoder;
         this.jwtUtil = jwtUtil;
         this.userRepository = userRepository;
         this.userService = userService;
         this.redisTemplate = redisTemplate;
+        this.userOnlineService = userOnlineService;
     }
 
     @PostMapping("/register")
@@ -69,7 +72,8 @@ public class AuthController {
         }
         String token = jwtUtil.generate(entity.getUsername(), Map.of());
         long expiresAt = Instant.now().toEpochMilli() + jwtUtil.getExpirationMillis();
-        UserBriefVO userBrief = new UserBriefVO(entity.getId(), entity.getNickname(), entity.getPoints());
+        // 添加角色参数到 UserBriefVO
+        UserBriefVO userBrief = new UserBriefVO(entity.getId(), entity.getNickname(), entity.getPoints(), entity.getRole());
         return Result.ok(new LoginRespVO(token, expiresAt, userBrief));
     }
 
@@ -97,6 +101,16 @@ public class AuthController {
         if (!jwtUtil.validate(token)) {
             throw new BizException(ErrorCode.UNAUTHORIZED);
         }
+
+        // 从 JWT token 中提取用户名并查找用户
+        String username = jwtUtil.getSubject(token);
+        User user = userRepository.findByUsername(username).orElse(null);
+
+        // 设置用户下线
+        if (user != null) {
+            userOnlineService.setUserOffline(user.getId());
+        }
+
         long exp = jwtUtil.getExpirationEpochMillis(token);
         long now = Instant.now().toEpochMilli();
         long ttl = Math.max(exp - now, 1000);

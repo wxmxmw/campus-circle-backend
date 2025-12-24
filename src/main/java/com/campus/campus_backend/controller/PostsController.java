@@ -3,12 +3,7 @@ package com.campus.campus_backend.controller;
 import com.campus.campus_backend.common.BizException;
 import com.campus.campus_backend.common.ErrorCode;
 import com.campus.campus_backend.common.Result;
-import com.campus.campus_backend.domain.Category;
-import com.campus.campus_backend.domain.Comment;
-import com.campus.campus_backend.domain.Notification;
-import com.campus.campus_backend.domain.PointTransaction;
-import com.campus.campus_backend.domain.Post;
-import com.campus.campus_backend.domain.User;
+import com.campus.campus_backend.domain.*;
 import com.campus.campus_backend.dto.CreateCommentRequest;
 import com.campus.campus_backend.dto.CreatePostRequest;
 import com.campus.campus_backend.repository.CategoryRepository;
@@ -35,7 +30,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-
+import com.campus.campus_backend.repository.SysFileRepository;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -56,17 +51,19 @@ public class PostsController {
     private final CommentLikeRepository commentLikeRepository;
     private final PointTransactionRepository pointTransactionRepository;
     private final NotificationRepository notificationRepository;
+    private final SysFileRepository sysFileRepository;
     private final ObjectMapper mapper = new ObjectMapper();
 
     public PostsController(PostRepository postRepository,
-                           UserRepository userRepository,
-                           CategoryRepository categoryRepository,
-                           PostLikeRepository postLikeRepository,
-                           PostCollectionRepository postCollectionRepository,
-                           CommentRepository commentRepository,
-                           PointTransactionRepository pointTransactionRepository,
-                           CommentLikeRepository commentLikeRepository,
-                           NotificationRepository notificationRepository) {
+            UserRepository userRepository,
+            CategoryRepository categoryRepository,
+            PostLikeRepository postLikeRepository,
+            PostCollectionRepository postCollectionRepository,
+            CommentRepository commentRepository,
+            PointTransactionRepository pointTransactionRepository,
+            CommentLikeRepository commentLikeRepository,
+            NotificationRepository notificationRepository,
+            SysFileRepository sysFileRepository) {
         this.postRepository = postRepository;
         this.userRepository = userRepository;
         this.categoryRepository = categoryRepository;
@@ -76,12 +73,13 @@ public class PostsController {
         this.pointTransactionRepository = pointTransactionRepository;
         this.commentLikeRepository = commentLikeRepository;
         this.notificationRepository = notificationRepository;
+        this.sysFileRepository = sysFileRepository;
     }
 
     @PostMapping
     @Transactional
     public Result<PostPublishRespVO> create(@AuthenticationPrincipal UserDetails principal,
-                                            @Validated @RequestBody CreatePostRequest req) {
+            @Validated @RequestBody CreatePostRequest req) {
         if (principal == null) {
             throw new BizException(ErrorCode.UNAUTHORIZED);
         }
@@ -123,6 +121,19 @@ public class PostsController {
         p.setCommentCount(0);
         p = postRepository.save(p);
 
+        // 新增：更新相关文件的业务关联
+        if (req.getImages() != null && !req.getImages().isEmpty()) {
+            // 从URL中提取文件ID或通过URL查询文件记录
+            for (String imageUrl : req.getImages()) {
+                SysFile file = sysFileRepository.findByFileUrl(imageUrl);
+                if (file != null) {
+                    file.setBusinessId(p.getId());
+                    file.setBusinessType("post");
+                    sysFileRepository.save(file);
+                }
+            }
+        }
+
         // 发帖积分奖励
         int currentPoints = user.getPoints() != null ? user.getPoints() : 0;
         user.setPoints(currentPoints + 20);
@@ -161,13 +172,83 @@ public class PostsController {
         return Result.ok(vo);
     }
 
+    @GetMapping("/hot")
+    @Transactional
+    public Result<List<Map<String, Object>>> hot(@RequestParam(defaultValue = "5") int limit) {
+        List<Post> posts = postRepository.findAll();
+
+        // 更新热度分：浏览*1 + 点赞*3 + 评论*5
+        for (Post p : posts) {
+            int v = p.getViewCount() != null ? p.getViewCount() : 0;
+            int l = p.getLikeCount() != null ? p.getLikeCount() : 0;
+            int c = p.getCommentCount() != null ? p.getCommentCount() : 0;
+            int score = v + l * 3 + c * 5;
+            p.setHotScore(score);
+        }
+        postRepository.saveAll(posts);
+
+        // 排序
+        posts.sort((p1, p2) -> {
+            int s1 = p1.getHotScore() != null ? p1.getHotScore() : 0;
+            int s2 = p2.getHotScore() != null ? p2.getHotScore() : 0;
+            return Integer.compare(s2, s1);
+        });
+
+        List<Map<String, Object>> list = new ArrayList<>();
+        int count = 0;
+        for (Post p : posts) {
+            if (count >= limit)
+                break;
+
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("id", p.getId());
+
+            String title = p.getSummary();
+            if (title == null || title.isEmpty()) {
+                String content = p.getContent();
+                if (content != null) {
+                    title = content.length() > 20 ? content.substring(0, 20) + "..." : content;
+                } else {
+                    title = "";
+                }
+            }
+            item.put("title", title);
+            item.put("content", p.getContent());
+
+            User u = p.getUser();
+            item.put("userId", u != null ? u.getId() : null);
+            String name = u != null && u.getNickname() != null ? u.getNickname()
+                    : (u != null ? u.getUsername() : "匿名用户");
+            item.put("userName", name);
+            item.put("userAvatar", u != null ? u.getAvatarUrl() : null);
+
+            int views = p.getViewCount() != null ? p.getViewCount() : 0;
+            item.put("views", views);
+            item.put("viewsText", formatViews(views));
+
+            item.put("likes", p.getLikeCount() != null ? p.getLikeCount() : 0);
+            item.put("comments", p.getCommentCount() != null ? p.getCommentCount() : 0);
+            item.put("hotRank", count + 1);
+
+            String time = p.getCreatedAt() != null
+                    ? p.getCreatedAt().atZone(ZoneId.of("Asia/Shanghai")).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+                    : "";
+            item.put("time", time);
+
+            list.add(item);
+            count++;
+        }
+
+        return Result.ok(list);
+    }
+
     @GetMapping
     @Transactional(readOnly = true)
     public Result<Object> list(@AuthenticationPrincipal UserDetails principal,
-                               @RequestParam(required = false) String keyword,
-                               @RequestParam(required = false) Long categoryId,
-                               @RequestParam(defaultValue = "1") int page,
-                               @RequestParam(defaultValue = "10") int pageSize) {
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Long categoryId,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int pageSize) {
         // 参数校验
         if (page < 1) {
             page = 1;
@@ -176,7 +257,8 @@ public class PostsController {
             pageSize = 10;
         }
 
-        org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(page - 1, pageSize);
+        org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(page - 1,
+                pageSize);
         org.springframework.data.domain.Page<Post> postsPage;
         boolean hasKeyword = keyword != null && !keyword.trim().isEmpty();
 
@@ -224,7 +306,8 @@ public class PostsController {
             try {
                 List<String> images = new ArrayList<>();
                 if (p.getImages() != null && !p.getImages().isEmpty()) {
-                    images = mapper.readValue(p.getImages(), new TypeReference<List<String>>() {});
+                    images = mapper.readValue(p.getImages(), new TypeReference<List<String>>() {
+                    });
                 }
                 item.put("images", images);
             } catch (Exception ignore) {
@@ -235,7 +318,8 @@ public class PostsController {
             try {
                 Map<String, Object> product = null;
                 if (p.getProductInfo() != null && !p.getProductInfo().isEmpty()) {
-                    product = mapper.readValue(p.getProductInfo(), new TypeReference<Map<String, Object>>() {});
+                    product = mapper.readValue(p.getProductInfo(), new TypeReference<Map<String, Object>>() {
+                    });
                     if (product != null) {
                         Map<String, Object> onlyPrice = new LinkedHashMap<>();
                         if (product.containsKey("price")) {
@@ -297,8 +381,8 @@ public class PostsController {
     @PostMapping("/{postId}/like")
     @Transactional
     public Result<Map<String, Boolean>> like(@AuthenticationPrincipal UserDetails principal,
-                                             @PathVariable Long postId,
-                                             @RequestParam(required = false) Boolean isLike) {
+            @PathVariable Long postId,
+            @RequestParam(required = false) Boolean isLike) {
         if (principal == null) {
             throw new BizException(ErrorCode.UNAUTHORIZED);
         }
@@ -349,13 +433,13 @@ public class PostsController {
 
     @DeleteMapping("/{postId}/like")
     public Result<Map<String, Boolean>> unlike(@AuthenticationPrincipal UserDetails principal,
-                                               @PathVariable Long postId) {
+            @PathVariable Long postId) {
         return like(principal, postId, false);
     }
 
     @PostMapping("/{postId}/collect")
     public Result<Map<String, Boolean>> collect(@AuthenticationPrincipal UserDetails principal,
-                                                @PathVariable Long postId) {
+            @PathVariable Long postId) {
         if (principal == null) {
             throw new BizException(ErrorCode.UNAUTHORIZED);
         }
@@ -386,7 +470,7 @@ public class PostsController {
 
     @DeleteMapping("/{postId}/collect")
     public Result<Map<String, Boolean>> uncollect(@AuthenticationPrincipal UserDetails principal,
-                                                  @PathVariable Long postId) {
+            @PathVariable Long postId) {
         if (principal == null) {
             throw new BizException(ErrorCode.UNAUTHORIZED);
         }
@@ -413,8 +497,8 @@ public class PostsController {
     @PostMapping("/{postId}/comments")
     @Transactional
     public Result<Map<String, Object>> createComment(@AuthenticationPrincipal UserDetails principal,
-                                                     @PathVariable Long postId,
-                                                     @Validated @RequestBody CreateCommentRequest req) {
+            @PathVariable Long postId,
+            @Validated @RequestBody CreateCommentRequest req) {
         if (principal == null) {
             throw new BizException(ErrorCode.UNAUTHORIZED);
         }
@@ -499,7 +583,7 @@ public class PostsController {
 
         String replyTo = c.getReplyToUser() != null
                 ? (c.getReplyToUser().getNickname() != null ? c.getReplyToUser().getNickname()
-                : c.getReplyToUser().getUsername())
+                        : c.getReplyToUser().getUsername())
                 : null;
         data.put("replyTo", replyTo);
 
@@ -509,7 +593,7 @@ public class PostsController {
     @GetMapping("/{postId}/comments")
     @Transactional(readOnly = true)
     public Result<Map<String, Object>> listComments(@AuthenticationPrincipal UserDetails principal,
-                                                    @PathVariable Long postId) {
+            @PathVariable Long postId) {
         Post post = postRepository.findById(postId).orElseThrow(() -> new BizException(ErrorCode.NOT_FOUND));
 
         User current = null;
@@ -571,7 +655,7 @@ public class PostsController {
 
                 String rtime = r.getCreatedAt() != null
                         ? r.getCreatedAt().atZone(ZoneId.of("Asia/Shanghai"))
-                        .format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+                                .format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
                         : "";
                 ri.put("time", rtime);
 
@@ -579,7 +663,7 @@ public class PostsController {
 
                 String replyTo = r.getReplyToUser() != null
                         ? (r.getReplyToUser().getNickname() != null ? r.getReplyToUser().getNickname()
-                        : r.getReplyToUser().getUsername())
+                                : r.getReplyToUser().getUsername())
                         : null;
                 ri.put("replyTo", replyTo);
 
@@ -608,7 +692,7 @@ public class PostsController {
     @PostMapping("/{postId}/view")
     @Transactional
     public Result<Map<String, Object>> addView(@AuthenticationPrincipal UserDetails principal,
-                                               @PathVariable Long postId) {
+            @PathVariable Long postId) {
         if (principal == null) {
             throw new BizException(ErrorCode.UNAUTHORIZED);
         }
@@ -629,7 +713,7 @@ public class PostsController {
     @GetMapping("/{postId}")
     @Transactional
     public Result<Map<String, Object>> detail(@AuthenticationPrincipal UserDetails principal,
-                                              @PathVariable Long postId) {
+            @PathVariable Long postId) {
         Post p = postRepository.findById(postId).orElseThrow(() -> new BizException(ErrorCode.NOT_FOUND));
 
         // 增加阅读量
@@ -661,7 +745,8 @@ public class PostsController {
         try {
             List<String> images = new ArrayList<>();
             if (p.getImages() != null && !p.getImages().isEmpty()) {
-                images = mapper.readValue(p.getImages(), new TypeReference<List<String>>() {});
+                images = mapper.readValue(p.getImages(), new TypeReference<List<String>>() {
+                });
             }
             data.put("images", images);
         } catch (Exception ignore) {
@@ -672,7 +757,8 @@ public class PostsController {
         try {
             Map<String, Object> product = null;
             if (p.getProductInfo() != null && !p.getProductInfo().isEmpty()) {
-                product = mapper.readValue(p.getProductInfo(), new TypeReference<Map<String, Object>>() {});
+                product = mapper.readValue(p.getProductInfo(), new TypeReference<Map<String, Object>>() {
+                });
                 if (product != null) {
                     Map<String, Object> onlyPrice = new LinkedHashMap<>();
                     if (product.containsKey("price")) {
@@ -721,8 +807,8 @@ public class PostsController {
     @PostMapping("/{id}/top")
     @Transactional
     public Result<Map<String, Boolean>> top(@AuthenticationPrincipal UserDetails principal,
-                                            @PathVariable Long id,
-                                            @RequestBody(required = false) Map<String, Object> body) {
+            @PathVariable Long id,
+            @RequestBody(required = false) Map<String, Object> body) {
         if (principal == null) {
             throw new BizException(ErrorCode.UNAUTHORIZED);
         }
@@ -780,7 +866,7 @@ public class PostsController {
     @DeleteMapping("/{id}/top")
     @Transactional
     public Result<Map<String, Boolean>> untop(@AuthenticationPrincipal UserDetails principal,
-                                              @PathVariable Long id) {
+            @PathVariable Long id) {
         if (principal == null) {
             throw new BizException(ErrorCode.UNAUTHORIZED);
         }

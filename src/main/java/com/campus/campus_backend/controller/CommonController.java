@@ -221,11 +221,14 @@ public class CommonController {
                 sysFile.setFileUrl(fileUrl);
                 sysFile.setFileType(file.getContentType());
                 sysFile.setFileSize(String.valueOf(file.getSize()));
-                sysFile.setUploaderId(currentUser.getId()); // 记录上传者
+                sysFile.setUploaderId(currentUser.getId());
                 sysFile.setCreateTime(LocalDateTime.now());
 
+                // 新增：设置业务关联
+                sysFile.setBusinessType(scene.equals("post_image") ? "post" : null);
+                // businessId 暂时为 null，等帖子创建后再更新
+
                 sysFileRepository.save(sysFile);
-                // ===================================
 
                 // 6. 构建返回给前端的数据
                 Map<String, Object> fileInfo = new HashMap<>();
