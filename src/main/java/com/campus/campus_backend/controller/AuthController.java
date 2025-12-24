@@ -70,11 +70,10 @@ public class AuthController {
         if (!passwordEncoder.matches(req.getPassword(), entity.getPasswordHash())) {
             throw new BizException(ErrorCode.UNAUTHORIZED);
         }
-        // 设置用户上线
-        userOnlineService.setUserOnline(entity.getId());
         String token = jwtUtil.generate(entity.getUsername(), Map.of());
         long expiresAt = Instant.now().toEpochMilli() + jwtUtil.getExpirationMillis();
-        UserBriefVO userBrief = new UserBriefVO(entity.getId(), entity.getNickname(), entity.getPoints());
+        // 添加角色参数到 UserBriefVO
+        UserBriefVO userBrief = new UserBriefVO(entity.getId(), entity.getNickname(), entity.getPoints(), entity.getRole());
         return Result.ok(new LoginRespVO(token, expiresAt, userBrief));
     }
 

@@ -172,6 +172,76 @@ public class PostsController {
         return Result.ok(vo);
     }
 
+    @GetMapping("/hot")
+    @Transactional
+    public Result<List<Map<String, Object>>> hot(@RequestParam(defaultValue = "5") int limit) {
+        List<Post> posts = postRepository.findAll();
+
+        // 更新热度分：浏览*1 + 点赞*3 + 评论*5
+        for (Post p : posts) {
+            int v = p.getViewCount() != null ? p.getViewCount() : 0;
+            int l = p.getLikeCount() != null ? p.getLikeCount() : 0;
+            int c = p.getCommentCount() != null ? p.getCommentCount() : 0;
+            int score = v + l * 3 + c * 5;
+            p.setHotScore(score);
+        }
+        postRepository.saveAll(posts);
+
+        // 排序
+        posts.sort((p1, p2) -> {
+            int s1 = p1.getHotScore() != null ? p1.getHotScore() : 0;
+            int s2 = p2.getHotScore() != null ? p2.getHotScore() : 0;
+            return Integer.compare(s2, s1);
+        });
+
+        List<Map<String, Object>> list = new ArrayList<>();
+        int count = 0;
+        for (Post p : posts) {
+            if (count >= limit)
+                break;
+
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("id", p.getId());
+
+            String title = p.getSummary();
+            if (title == null || title.isEmpty()) {
+                String content = p.getContent();
+                if (content != null) {
+                    title = content.length() > 20 ? content.substring(0, 20) + "..." : content;
+                } else {
+                    title = "";
+                }
+            }
+            item.put("title", title);
+            item.put("content", p.getContent());
+
+            User u = p.getUser();
+            item.put("userId", u != null ? u.getId() : null);
+            String name = u != null && u.getNickname() != null ? u.getNickname()
+                    : (u != null ? u.getUsername() : "匿名用户");
+            item.put("userName", name);
+            item.put("userAvatar", u != null ? u.getAvatarUrl() : null);
+
+            int views = p.getViewCount() != null ? p.getViewCount() : 0;
+            item.put("views", views);
+            item.put("viewsText", formatViews(views));
+
+            item.put("likes", p.getLikeCount() != null ? p.getLikeCount() : 0);
+            item.put("comments", p.getCommentCount() != null ? p.getCommentCount() : 0);
+            item.put("hotRank", count + 1);
+
+            String time = p.getCreatedAt() != null
+                    ? p.getCreatedAt().atZone(ZoneId.of("Asia/Shanghai")).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+                    : "";
+            item.put("time", time);
+
+            list.add(item);
+            count++;
+        }
+
+        return Result.ok(list);
+    }
+
     @GetMapping
     @Transactional(readOnly = true)
     public Result<Object> list(@AuthenticationPrincipal UserDetails principal,
@@ -187,7 +257,8 @@ public class PostsController {
             pageSize = 10;
         }
 
-        org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(page - 1, pageSize);
+        org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(page - 1,
+                pageSize);
         org.springframework.data.domain.Page<Post> postsPage;
         boolean hasKeyword = keyword != null && !keyword.trim().isEmpty();
 
@@ -235,7 +306,8 @@ public class PostsController {
             try {
                 List<String> images = new ArrayList<>();
                 if (p.getImages() != null && !p.getImages().isEmpty()) {
-                    images = mapper.readValue(p.getImages(), new TypeReference<List<String>>() {});
+                    images = mapper.readValue(p.getImages(), new TypeReference<List<String>>() {
+                    });
                 }
                 item.put("images", images);
             } catch (Exception ignore) {
@@ -246,7 +318,8 @@ public class PostsController {
             try {
                 Map<String, Object> product = null;
                 if (p.getProductInfo() != null && !p.getProductInfo().isEmpty()) {
-                    product = mapper.readValue(p.getProductInfo(), new TypeReference<Map<String, Object>>() {});
+                    product = mapper.readValue(p.getProductInfo(), new TypeReference<Map<String, Object>>() {
+                    });
                     if (product != null) {
                         Map<String, Object> onlyPrice = new LinkedHashMap<>();
                         if (product.containsKey("price")) {
@@ -672,7 +745,8 @@ public class PostsController {
         try {
             List<String> images = new ArrayList<>();
             if (p.getImages() != null && !p.getImages().isEmpty()) {
-                images = mapper.readValue(p.getImages(), new TypeReference<List<String>>() {});
+                images = mapper.readValue(p.getImages(), new TypeReference<List<String>>() {
+                });
             }
             data.put("images", images);
         } catch (Exception ignore) {
@@ -683,7 +757,8 @@ public class PostsController {
         try {
             Map<String, Object> product = null;
             if (p.getProductInfo() != null && !p.getProductInfo().isEmpty()) {
-                product = mapper.readValue(p.getProductInfo(), new TypeReference<Map<String, Object>>() {});
+                product = mapper.readValue(p.getProductInfo(), new TypeReference<Map<String, Object>>() {
+                });
                 if (product != null) {
                     Map<String, Object> onlyPrice = new LinkedHashMap<>();
                     if (product.containsKey("price")) {
