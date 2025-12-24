@@ -55,15 +55,15 @@ public class PostsController {
     private final ObjectMapper mapper = new ObjectMapper();
 
     public PostsController(PostRepository postRepository,
-                           UserRepository userRepository,
-                           CategoryRepository categoryRepository,
-                           PostLikeRepository postLikeRepository,
-                           PostCollectionRepository postCollectionRepository,
-                           CommentRepository commentRepository,
-                           PointTransactionRepository pointTransactionRepository,
-                           CommentLikeRepository commentLikeRepository,
-                           NotificationRepository notificationRepository,
-                           SysFileRepository sysFileRepository) {
+            UserRepository userRepository,
+            CategoryRepository categoryRepository,
+            PostLikeRepository postLikeRepository,
+            PostCollectionRepository postCollectionRepository,
+            CommentRepository commentRepository,
+            PointTransactionRepository pointTransactionRepository,
+            CommentLikeRepository commentLikeRepository,
+            NotificationRepository notificationRepository,
+            SysFileRepository sysFileRepository) {
         this.postRepository = postRepository;
         this.userRepository = userRepository;
         this.categoryRepository = categoryRepository;
@@ -79,7 +79,7 @@ public class PostsController {
     @PostMapping
     @Transactional
     public Result<PostPublishRespVO> create(@AuthenticationPrincipal UserDetails principal,
-                                            @Validated @RequestBody CreatePostRequest req) {
+            @Validated @RequestBody CreatePostRequest req) {
         if (principal == null) {
             throw new BizException(ErrorCode.UNAUTHORIZED);
         }
@@ -245,10 +245,10 @@ public class PostsController {
     @GetMapping
     @Transactional(readOnly = true)
     public Result<Object> list(@AuthenticationPrincipal UserDetails principal,
-                               @RequestParam(required = false) String keyword,
-                               @RequestParam(required = false) Long categoryId,
-                               @RequestParam(defaultValue = "1") int page,
-                               @RequestParam(defaultValue = "10") int pageSize) {
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Long categoryId,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int pageSize) {
         // 参数校验
         if (page < 1) {
             page = 1;
@@ -381,8 +381,8 @@ public class PostsController {
     @PostMapping("/{postId}/like")
     @Transactional
     public Result<Map<String, Boolean>> like(@AuthenticationPrincipal UserDetails principal,
-                                             @PathVariable Long postId,
-                                             @RequestParam(required = false) Boolean isLike) {
+            @PathVariable Long postId,
+            @RequestParam(required = false) Boolean isLike) {
         if (principal == null) {
             throw new BizException(ErrorCode.UNAUTHORIZED);
         }
@@ -433,13 +433,13 @@ public class PostsController {
 
     @DeleteMapping("/{postId}/like")
     public Result<Map<String, Boolean>> unlike(@AuthenticationPrincipal UserDetails principal,
-                                               @PathVariable Long postId) {
+            @PathVariable Long postId) {
         return like(principal, postId, false);
     }
 
     @PostMapping("/{postId}/collect")
     public Result<Map<String, Boolean>> collect(@AuthenticationPrincipal UserDetails principal,
-                                                @PathVariable Long postId) {
+            @PathVariable Long postId) {
         if (principal == null) {
             throw new BizException(ErrorCode.UNAUTHORIZED);
         }
@@ -470,7 +470,7 @@ public class PostsController {
 
     @DeleteMapping("/{postId}/collect")
     public Result<Map<String, Boolean>> uncollect(@AuthenticationPrincipal UserDetails principal,
-                                                  @PathVariable Long postId) {
+            @PathVariable Long postId) {
         if (principal == null) {
             throw new BizException(ErrorCode.UNAUTHORIZED);
         }
@@ -497,8 +497,8 @@ public class PostsController {
     @PostMapping("/{postId}/comments")
     @Transactional
     public Result<Map<String, Object>> createComment(@AuthenticationPrincipal UserDetails principal,
-                                                     @PathVariable Long postId,
-                                                     @Validated @RequestBody CreateCommentRequest req) {
+            @PathVariable Long postId,
+            @Validated @RequestBody CreateCommentRequest req) {
         if (principal == null) {
             throw new BizException(ErrorCode.UNAUTHORIZED);
         }
@@ -583,7 +583,7 @@ public class PostsController {
 
         String replyTo = c.getReplyToUser() != null
                 ? (c.getReplyToUser().getNickname() != null ? c.getReplyToUser().getNickname()
-                : c.getReplyToUser().getUsername())
+                        : c.getReplyToUser().getUsername())
                 : null;
         data.put("replyTo", replyTo);
 
@@ -593,7 +593,7 @@ public class PostsController {
     @GetMapping("/{postId}/comments")
     @Transactional(readOnly = true)
     public Result<Map<String, Object>> listComments(@AuthenticationPrincipal UserDetails principal,
-                                                    @PathVariable Long postId) {
+            @PathVariable Long postId) {
         Post post = postRepository.findById(postId).orElseThrow(() -> new BizException(ErrorCode.NOT_FOUND));
 
         User current = null;
@@ -655,7 +655,7 @@ public class PostsController {
 
                 String rtime = r.getCreatedAt() != null
                         ? r.getCreatedAt().atZone(ZoneId.of("Asia/Shanghai"))
-                        .format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+                                .format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
                         : "";
                 ri.put("time", rtime);
 
@@ -663,7 +663,7 @@ public class PostsController {
 
                 String replyTo = r.getReplyToUser() != null
                         ? (r.getReplyToUser().getNickname() != null ? r.getReplyToUser().getNickname()
-                        : r.getReplyToUser().getUsername())
+                                : r.getReplyToUser().getUsername())
                         : null;
                 ri.put("replyTo", replyTo);
 
@@ -692,7 +692,7 @@ public class PostsController {
     @PostMapping("/{postId}/view")
     @Transactional
     public Result<Map<String, Object>> addView(@AuthenticationPrincipal UserDetails principal,
-                                               @PathVariable Long postId) {
+            @PathVariable Long postId) {
         if (principal == null) {
             throw new BizException(ErrorCode.UNAUTHORIZED);
         }
@@ -713,7 +713,7 @@ public class PostsController {
     @GetMapping("/{postId}")
     @Transactional
     public Result<Map<String, Object>> detail(@AuthenticationPrincipal UserDetails principal,
-                                              @PathVariable Long postId) {
+            @PathVariable Long postId) {
         Post p = postRepository.findById(postId).orElseThrow(() -> new BizException(ErrorCode.NOT_FOUND));
 
         // 增加阅读量
@@ -807,8 +807,8 @@ public class PostsController {
     @PostMapping("/{id}/top")
     @Transactional
     public Result<Map<String, Boolean>> top(@AuthenticationPrincipal UserDetails principal,
-                                            @PathVariable Long id,
-                                            @RequestBody(required = false) Map<String, Object> body) {
+            @PathVariable Long id,
+            @RequestBody(required = false) Map<String, Object> body) {
         if (principal == null) {
             throw new BizException(ErrorCode.UNAUTHORIZED);
         }
@@ -866,7 +866,7 @@ public class PostsController {
     @DeleteMapping("/{id}/top")
     @Transactional
     public Result<Map<String, Boolean>> untop(@AuthenticationPrincipal UserDetails principal,
-                                              @PathVariable Long id) {
+            @PathVariable Long id) {
         if (principal == null) {
             throw new BizException(ErrorCode.UNAUTHORIZED);
         }
