@@ -38,7 +38,15 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/register", "/api/auth/login", "/api/auth/refresh").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/categories").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/posts", "/api/posts/**").permitAll()
-                        .requestMatchers("/uploads/**").permitAll() // 允许访问上传的图片
+                        .requestMatchers("/uploads/**").permitAll() //
+                        // Swagger UI 和 API 文档相关路径 - 放行
+                        .requestMatchers(
+                                "/swagger-ui/**",
+                                "/swagger-ui.html",
+                                "/v3/api-docs/**",
+                                "/swagger-resources/**",
+                                "/webjars/**"
+                        ).permitAll()
                         .anyRequest().authenticated())
                 .exceptionHandling(eh -> eh.authenticationEntryPoint(authenticationEntryPoint)
                         .accessDeniedHandler(accessDeniedHandler))
