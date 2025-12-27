@@ -39,6 +39,20 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/categories").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/posts", "/api/posts/**").permitAll()
                         .requestMatchers("/uploads/**").permitAll() //
+                        .requestMatchers(
+                                "/actuator/**",
+                                "/instances/**",     // Spring Boot Admin
+                                "/assets/**",        // Admin UI 静态资源
+                                "/applications/**"   // Admin UI API
+                        ).permitAll()
+                        // Actuator 监控端点 - 新增这部分
+                        .requestMatchers(
+                                "/actuator/**",
+                                "/actuator/health/**",
+                                "/actuator/info/**",
+                                "/actuator/metrics/**",
+                                "/actuator/prometheus/**"
+                        ).permitAll()
                         // Swagger UI 和 API 文档相关路径 - 放行
                         .requestMatchers(
                                 "/swagger-ui/**",
@@ -47,6 +61,8 @@ public class SecurityConfig {
                                 "/swagger-resources/**",
                                 "/webjars/**"
                         ).permitAll()
+                        // 静态资源（新增）
+                        .requestMatchers("/monitor.html", "/*.html", "/css/**", "/js/**", "/images/**").permitAll()
                         .anyRequest().authenticated())
                 .exceptionHandling(eh -> eh.authenticationEntryPoint(authenticationEntryPoint)
                         .accessDeniedHandler(accessDeniedHandler))
