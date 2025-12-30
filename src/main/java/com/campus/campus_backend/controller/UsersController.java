@@ -116,6 +116,39 @@ public class UsersController {
         return Result.ok(vo);
     }
 
+    @PutMapping("/me")
+    @Transactional
+    public Result<UserProfileVO> updateMe(@AuthenticationPrincipal UserDetails principal,
+            @Validated @RequestBody UpdateProfileRequest req) {
+        if (principal == null) {
+            throw new BizException(ErrorCode.UNAUTHORIZED);
+        }
+        User u = userRepository.findByUsername(principal.getUsername())
+                .orElseThrow(() -> new BizException(ErrorCode.UNAUTHORIZED));
+        if (req.getNickname() != null) {
+            u.setNickname(req.getNickname());
+        }
+        if (req.getBio() != null) {
+            u.setBio(req.getBio());
+        }
+        if (req.getAvatarUrl() != null) {
+            u.setAvatarUrl(req.getAvatarUrl());
+        }
+        if (req.getSchool() != null) {
+            u.setSchool(req.getSchool());
+        }
+        userRepository.save(u);
+        UserProfileVO vo = new UserProfileVO();
+        vo.setId(u.getId());
+        vo.setUsername(u.getUsername());
+        vo.setNickname(u.getNickname());
+        vo.setAvatarUrl(u.getAvatarUrl());
+        vo.setSchool(u.getSchool());
+        vo.setPoints(u.getPoints() != null ? u.getPoints() : 0);
+        vo.setBio(u.getBio());
+        return Result.ok(vo);
+    }
+
     @PostMapping("/me/points")
     @Transactional
     public Result<java.util.Map<String, Integer>> changePoints(@AuthenticationPrincipal UserDetails principal,
@@ -634,14 +667,17 @@ public class UsersController {
 
     @GetMapping("/{id}/posts")
     public Result<Object> getUserPosts(@PathVariable Long id,
-                                       @RequestParam(defaultValue = "1") int page,
-                                       @RequestParam(defaultValue = "10") int size) {
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int size) {
         // 1. 基础参数校验
-        if (page < 1) page = 1;
-        if (size < 1) size = 10;
+        if (page < 1)
+            page = 1;
+        if (size < 1)
+            size = 10;
 
         // 2. 检查目标用户是否存在 (可选，为了严谨最好加上)
-        // userRepository.findById(id).orElseThrow(() -> new BizException(ErrorCode.NOT_FOUND));
+        // userRepository.findById(id).orElseThrow(() -> new
+        // BizException(ErrorCode.NOT_FOUND));
 
         // 3. 查询数据库
         Pageable pageable = PageRequest.of(page - 1, size);
@@ -654,7 +690,8 @@ public class UsersController {
         // 4. 安全转换数据
         for (Post p : postsPage.getContent()) {
             // 防御性判断：如果查出来的对象为空，跳过
-            if (p == null) continue;
+            if (p == null)
+                continue;
 
             PostItemVO item = new PostItemVO();
             item.setId(p.getId());
@@ -665,7 +702,8 @@ public class UsersController {
             List<String> imgs = new ArrayList<>();
             try {
                 if (p.getImages() != null && !p.getImages().isEmpty()) {
-                    imgs = mapper.readValue(p.getImages(), new TypeReference<List<String>>() {});
+                    imgs = mapper.readValue(p.getImages(), new TypeReference<List<String>>() {
+                    });
                 }
             } catch (Exception e) {
                 // 解析失败就给个空列表，不要报错
@@ -696,8 +734,7 @@ public class UsersController {
                     com.campus.campus_backend.vo.AuthorVO author = new com.campus.campus_backend.vo.AuthorVO(
                             p.getUser().getId(),
                             nickname,
-                            avatar
-                    );
+                            avatar);
                     item.setAuthor(author);
                 } else {
                     // 如果数据库里 user_id 对应的用户被删了
