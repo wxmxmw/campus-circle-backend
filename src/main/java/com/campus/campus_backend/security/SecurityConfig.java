@@ -39,6 +39,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/categories").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/posts", "/api/posts/**").permitAll()
                         .requestMatchers("/api/uploads/**").permitAll() //
+                        .requestMatchers("/api/common/upload/**").permitAll() ///api/common/upload
+                        .requestMatchers("/api/common/upload/batch/**").permitAll() ///api/common/upload
+                        .requestMatchers("/api/**").permitAll() ///api/common/upload
                         .requestMatchers(
                                 "/actuator/**",
                                 "/instances/**",     // Spring Boot Admin
