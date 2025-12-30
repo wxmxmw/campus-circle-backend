@@ -10,10 +10,4 @@ public class WebConfig implements WebMvcConfigurer {
 
     @Value("${upload.path:/uploads}")
     private String uploadPath;
-
-    @Override
-    public void addResourceHandlers(ResourceHandlerRegistry registry) {
-        registry.addResourceHandler("/uploads/**")
-                .addResourceLocations("file:" + uploadPath + "/");
-    }
 }

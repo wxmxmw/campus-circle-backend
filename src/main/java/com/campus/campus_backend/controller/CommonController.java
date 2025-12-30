@@ -97,7 +97,7 @@ public class CommonController {
             log.info("头像文件已保存: {}", filePath);
 
             // 4. 生成URL
-            String fileUrl = serverUrl + "/uploads/avatars/" + filename;
+            String fileUrl = serverUrl + "/api/uploads/avatars/" + filename;
 
             // 5. 更新用户数据库信息
             String username = principal.getUsername();
@@ -208,7 +208,7 @@ public class CommonController {
                 Files.copy(file.getInputStream(), targetPath);
 
                 // 生成访问 URL
-                String fileUrl = serverUrl + "/uploads/" + scene + "/" + datePath + "/" + filename;
+                String fileUrl = serverUrl + "/api/uploads/" + scene + "/" + datePath + "/" + filename;
 
                 // 生成简单 Hash
                 String fileHash = "sha256:" + UUID.nameUUIDFromBytes(file.getBytes()).toString();
