@@ -163,8 +163,7 @@ public class ErrandsController {
 
     @PostMapping("/{id}/accept")
     @Transactional
-    public Result<Errand> acceptErrand(@AuthenticationPrincipal UserDetails principal,
-                                       @PathVariable Long id) {
+    public Result<Object> acceptErrand(@AuthenticationPrincipal UserDetails principal, @PathVariable Long id) {
         if (principal == null) {
             throw new BizException(ErrorCode.UNAUTHORIZED);
         }
@@ -211,13 +210,21 @@ public class ErrandsController {
             pointTransactionRepository.save(pt);
         }
 
-        return Result.ok(errand);
+        // 构建响应数据，避免直接序列化实体
+        Map<String, Object> data = new HashMap<>();
+        data.put("id", errand.getId());
+        data.put("status", errand.getStatus());
+        data.put("runnerId", errand.getRunner().getId());
+        data.put("runnerName", errand.getRunner().getNickname() != null ?
+                errand.getRunner().getNickname() : errand.getRunner().getUsername());
+
+        return Result.ok("接单成功", data);
     }
 
     @PostMapping("/{id}/complete")
     @Transactional
-    public Result<Errand> completeErrand(@AuthenticationPrincipal UserDetails principal,
-                                         @PathVariable Long id) {
+    public Result<Object> completeErrand(@AuthenticationPrincipal UserDetails principal,
+                                         @PathVariable Long id){
         if (principal == null) {
             throw new BizException(ErrorCode.UNAUTHORIZED);
         }
@@ -255,7 +262,13 @@ public class ErrandsController {
         errand.setCompletedAt(LocalDateTime.now());
         errand = errandRepository.save(errand);
 
-        return Result.ok(errand);
+        // 构建响应数据，避免直接序列化实体
+        Map<String, Object> data = new HashMap<>();
+        data.put("id", errand.getId());
+        data.put("status", errand.getStatus());
+        data.put("completedAt", errand.getCompletedAt());
+
+        return Result.ok("确认完成成功", data);
     }
 
     @PostMapping("/{id}/cancel")
