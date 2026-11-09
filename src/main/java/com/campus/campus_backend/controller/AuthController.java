@@ -67,6 +67,9 @@ public class AuthController {
         if (entity == null) {
             throw new BizException(ErrorCode.UNAUTHORIZED);
         }
+        if ("BANNED".equalsIgnoreCase(entity.getRole())) {
+            throw new BizException(ErrorCode.UNAUTHORIZED);
+        }
         if (!passwordEncoder.matches(req.getPassword(), entity.getPasswordHash())) {
             throw new BizException(ErrorCode.UNAUTHORIZED);
         }

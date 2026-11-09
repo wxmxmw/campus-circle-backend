@@ -4,6 +4,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import jakarta.servlet.http.HttpServletRequest;
@@ -23,15 +24,31 @@ public class FileApiController {
         try {
             // 从请求路径中提取文件路径
             String requestPath = request.getRequestURI();
-            String filePath = requestPath.replace("/api/uploads/", "");
+            String prefix = "/api/uploads/";
+            if (!requestPath.startsWith(prefix)) {
+                return ResponseEntity.notFound().build();
+            }
+            String filePath = requestPath.substring(prefix.length());
 
             // 构建完整的文件路径
-            Path file = Paths.get(uploadPath, filePath);
+            Path root = Paths.get(uploadPath).toRealPath();
+            Path file = root.resolve(filePath).normalize();
+            if (!file.startsWith(root) || !Files.isRegularFile(file) ||
+                    !file.toRealPath().startsWith(root)) {
+                return ResponseEntity.notFound().build();
+            }
+            String contentType = Files.probeContentType(file);
+            if (!MediaType.IMAGE_JPEG_VALUE.equals(contentType) &&
+                    !MediaType.IMAGE_PNG_VALUE.equals(contentType) &&
+                    !MediaType.IMAGE_GIF_VALUE.equals(contentType)) {
+                return ResponseEntity.notFound().build();
+            }
             Resource resource = new UrlResource(file.toUri());
 
-            if (resource.exists() || resource.isReadable()) {
+            if (resource.exists() && resource.isReadable()) {
                 return ResponseEntity.ok()
-                        .header(HttpHeaders.CONTENT_TYPE, Files.probeContentType(file))
+                        .header(HttpHeaders.CONTENT_TYPE, contentType)
+                        .header("X-Content-Type-Options", "nosniff")
                         .body(resource);
             } else {
                 return ResponseEntity.notFound().build();

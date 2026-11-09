@@ -1,33 +1,15 @@
 package com.campus.campus_backend.config;
 
-import com.campus.campus_backend.domain.User;
 import com.campus.campus_backend.domain.Category;
-import com.campus.campus_backend.repository.UserRepository;
 import com.campus.campus_backend.repository.CategoryRepository;
-import com.campus.campus_backend.service.UserService;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-import java.util.Set;
 import java.util.List;
 
 @Configuration
 public class DataInitializer {
-    @Bean
-    public CommandLineRunner initUsers(UserRepository userRepository, UserService userService) {
-        return args -> {
-            if (userRepository.findByUsername("admin").isEmpty()) {
-                User u = new User();
-                u.setUsername("admin");
-                u.setEmail("admin@example.com");
-                u.setPasswordHash("admin123");
-                u.setRole("USER");
-                userService.save(u);
-            }
-        };
-    }
-
     @Bean
     public CommandLineRunner initCategories(CategoryRepository categoryRepository) {
         return args -> {

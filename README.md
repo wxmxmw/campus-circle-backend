@@ -1,7 +1,11 @@
 # Campus Backend (Spring Boot)
 
-- **Deployment URL:** `http://120.26.30.91` (Base API path: `/api`)
+- **Base API path:** `/api`
 - **Tech Stack:** Spring Boot, Spring Security (JWT), Spring Data JPA, MySQL, Redis
+
+## Before Making This Repository Public
+
+Read [SECURITY-PUBLICATION.md](SECURITY-PUBLICATION.md). Older Git commits contain credentials and the existing GitHub repository is already public. Treat those credentials as exposed, rotate them, and address the old history. Runtime settings use environment variables; see [.env.example](.env.example) for variable names.
 
 ## Implemented Features
 
@@ -46,11 +50,11 @@
 
 ### API Documentation (Springdoc OpenAPI)
 - Integrated `springdoc-openapi` to automatically generate API documentation and provide an interactive Swagger UI, facilitating frontend-backend integration and troubleshooting
-- Configured Spring Security to allow access to documentation endpoints, with optional access restrictions for production environments
+- API documentation is disabled by default; set `API_DOCS_ENABLED=true` only in a trusted environment
 
 ### Observability & Monitoring (Spring Boot Actuator + Prometheus)
 - Integrated Spring Boot Actuator and Micrometer Prometheus Registry
-- Exposed health check and metrics endpoints to support monitoring and metrics collection
+- Exposed minimal health and info endpoints; detailed metrics are not public
 - Compatible with Prometheus and Grafana for metrics visualization and monitoring dashboards
 
 ## System Architecture

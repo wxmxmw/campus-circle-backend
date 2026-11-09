@@ -34,7 +34,7 @@ public class CommonController {
 
     // 允许上传的图片类型
     private static final Set<String> DEFAULT_ALLOW_TYPES = new HashSet<>(Arrays.asList(
-            "image/jpeg", "image/png", "image/webp", "image/gif"
+            "image/jpeg", "image/png", "image/gif"
     ));
 
     private final UserRepository userRepository;
@@ -75,7 +75,7 @@ public class CommonController {
         try {
             // 校验文件类型
             String contentType = file.getContentType();
-            if (contentType == null || !contentType.startsWith("image/")) {
+            if (!DEFAULT_ALLOW_TYPES.contains(contentType) || ImageIO.read(file.getInputStream()) == null) {
                 throw new BizException(ErrorCode.BAD_REQUEST.getCode(), "只支持图片文件");
             }
 
@@ -86,9 +86,7 @@ public class CommonController {
             }
 
             // 2. 生成唯一文件名
-            String originalFilename = file.getOriginalFilename();
-            String extension = (originalFilename != null && originalFilename.lastIndexOf(".") != -1)
-                    ? originalFilename.substring(originalFilename.lastIndexOf(".")) : "";
+            String extension = extensionFor(contentType);
             String filename = UUID.randomUUID().toString() + extension;
 
             // 3. 保存文件到磁盘
@@ -156,9 +154,8 @@ public class CommonController {
         }
 
         // 处理允许的文件类型
-        Set<String> allowedMimeTypes = DEFAULT_ALLOW_TYPES;
-        if (allowTypes != null && !allowTypes.isEmpty()) {
-            allowedMimeTypes = new HashSet<>(Arrays.asList(allowTypes.split(",")));
+        if (!scene.matches("[a-zA-Z0-9_-]{1,40}")) {
+            throw new BizException(ErrorCode.BAD_REQUEST.getCode(), "无效的上传场景");
         }
 
         List<Map<String, Object>> resultList = new ArrayList<>();
@@ -182,25 +179,21 @@ public class CommonController {
                 }
 
                 // 类型校验
-                if (!allowedMimeTypes.contains(file.getContentType())) {
+                if (!DEFAULT_ALLOW_TYPES.contains(file.getContentType())) {
                     throw new BizException(ErrorCode.BAD_REQUEST.getCode(), "不支持的文件类型: " + file.getOriginalFilename());
                 }
 
                 // 读取图片宽高
                 BufferedImage image = ImageIO.read(file.getInputStream());
-                int width = 0;
-                int height = 0;
-                if (image != null) {
-                    width = image.getWidth();
-                    height = image.getHeight();
+                if (image == null) {
+                    throw new BizException(ErrorCode.BAD_REQUEST.getCode(), "无效的图片文件");
                 }
+                int width = image.getWidth();
+                int height = image.getHeight();
 
                 // 生成文件名
                 String originalFilename = file.getOriginalFilename();
-                String extension = "";
-                if (originalFilename != null && originalFilename.lastIndexOf(".") != -1) {
-                    extension = originalFilename.substring(originalFilename.lastIndexOf("."));
-                }
+                String extension = extensionFor(file.getContentType());
                 String filename = UUID.randomUUID().toString() + extension;
 
                 // 保存文件到磁盘
@@ -251,13 +244,24 @@ public class CommonController {
 
             return Result.ok(data);
 
+        } catch (BizException e) {
+            throw e;
         } catch (IOException e) {
             log.error("批量上传IO异常", e);
             throw new BizException(500, "文件保存失败");
         } catch (Exception e) {
             log.error("批量上传系统错误", e);
             e.printStackTrace();
-            throw new BizException(500, "系统内部错误: " + e.getMessage());
+            throw new BizException(500, "系统内部错误");
         }
+    }
+
+    private static String extensionFor(String contentType) {
+        return switch (contentType) {
+            case "image/jpeg" -> ".jpg";
+            case "image/png" -> ".png";
+            case "image/gif" -> ".gif";
+            default -> throw new BizException(ErrorCode.BAD_REQUEST.getCode(), "不支持的文件类型");
+        };
     }
 }
